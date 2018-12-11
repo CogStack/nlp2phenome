@@ -1,0 +1,15 @@
+{
+  "ann_dir": "where is the document based annotations [dev data]",
+  "gold_dir": "where is the gold standard data labels [dev data]",
+  "test_semehr_output_dir": "where is the semehr output folder",
+  "test_ann_dir": "where is the document based annotations [test data]",
+  "test_fulltext_dir": "where is the full text folder",
+  "test_gold_dir": "where is the gold standard data labels [test data]",
+  "concept_mapping_file": "where is the json file for concept mappings",
+  "learning_model_dir": "where the machine learning models to be saved",
+  "entity_types_file": "where is the file containing all the entities",
+  "ignore_mapping_file": "where is the optional json file for ignoring the above mappings",
+  "min_sample_size": 25,
+  "viz_file": "where is the PDF file for visualising decision trees learnt",
+  "gazetteer_dir": "where is the complementary gazetteer files to be saved"
+}
