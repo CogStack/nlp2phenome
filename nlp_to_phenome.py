@@ -999,7 +999,6 @@ class LabelModel(object):
                 performance.increase_false_negative(fns)
             if multiple_tps > 0:
                 performance.increase_true_positive(multiple_tps)
-        all_true = True
         if all_true or len(X) <= _min_sample_size:
             logging.warn('using querying instead of predicting')
             P = numpy.ones(len(X))
