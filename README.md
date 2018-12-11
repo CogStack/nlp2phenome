@@ -15,4 +15,4 @@ two datasets (radiology reports) collected in Scotland
 - Tayside radiology reports (300 reports)
 
 ## contact
-email (honghan.wu@gmail.com)
+Dr Honghan Wu (honghan.wu@gmail.com)
