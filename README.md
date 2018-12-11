@@ -13,3 +13,6 @@ nlp2phenome was developed for a stroke subtyping study in Edinburgh University l
 two datasets (radiology reports) collected in Scotland
 - [Edinburgh Stroke Study](http://www.dcn.ed.ac.uk/ess/) training data (364 reports), testing data (266 reports)
 - Tayside radiology reports (300 reports)
+
+## contact
+email (honghan.wu@gmail.com)
