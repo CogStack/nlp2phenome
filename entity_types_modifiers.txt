@@ -1,0 +1,4 @@
+loc_cortical
+loc_deep
+time_old
+time_recent

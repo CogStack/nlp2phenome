@@ -1,0 +1,13 @@
+atrophy
+glioma_tumour
+haemorrhagic_stroke
+haemorrhagic_transformation
+ischaemic_stroke
+mening_tumour
+metast_tumour
+microhaemorrhage
+small_vessel_disease
+stroke
+subarachnoid_haemorrhage
+subdural_haematoma
+tumour
