@@ -117,6 +117,66 @@ class EDIRDoc(object):
         return self._entities
 
 
+class ConllDoc(EDIRDoc):
+    """
+    for Conll output from classification results
+    """
+    def __init__(self, file_path):
+        super(ConllDoc, self).__init__(file_path)
+        self._tokens = None
+        self._label_white_list = None
+
+    def set_label_white_list(self, labels):
+        self._label_white_list = labels
+
+    @property
+    def conll_output(self):
+        return '\n'.join([' '.join([t['t'], str(len(t['predicted_label'])), t['gold_label'],
+                                    (('B-' if t['predicted_label'][-1]['ann'].start == t['offset'] else 'I-') +
+                                     t['predicted_label'][-1]['label'] )
+                                    if len(t['predicted_label']) > 0 else 'O'])
+                          for t in self.get_token_list()])
+
+    def get_token_list(self):
+        if self._tokens is not None:
+            return self._tokens
+        self._tokens = []
+        start_offset = -1
+        root = self._root
+        for p in root.findall('.//p'):
+            for s in p:
+                if 'proc' in s.attrib: # and s.attrib['proc'] == 'yes':
+                    for w in s:
+                        id_val = int(w.attrib['id'][1:])
+                        if start_offset == -1:
+                            start_offset = id_val
+                        offset = id_val - start_offset
+                        token = {'t': w.text, 'id': w.attrib['id'], 'offset': offset,
+                                 'gold_label': 'O', 'predicted_label': []}
+                        for e in self.get_ess_entities():
+                            label = e.type.replace('neg_', '')
+                            if self._label_white_list is not None and label not in self._label_white_list:
+                                continue
+                            if token['offset'] == e.start:
+                                token['gold_label'] = 'B-' + label
+                            elif e.start < token['offset'] < e.end:
+                                token['gold_label'] = 'I-' + label
+                        self._tokens.append(token)
+        return self._tokens
+
+    def add_predicted_labels(self, predicted_label):
+        """
+        append prediction result to the doc, one annotation a time
+        :param predicted_label: labelled ann {'label': ..., 'ann': ann object}
+        :return:
+        """
+        if self._label_white_list is not None and predicted_label['label'] not in self._label_white_list:
+            return
+        for token in self.get_token_list():
+            if predicted_label['ann'].start <= token['offset'] < predicted_label['ann'].end:
+                token['predicted_label'].append(predicted_label)
+
+
 class BasicAnn(object):
     """
     a simple NLP (Named Entity) annotation class
@@ -1102,9 +1162,10 @@ class LabelModel(object):
                 else:
                     lbl = 'united'
                 if lbl not in lbl2data:
-                    lbl2data[lbl] = {'X': [], 'Y': [], 'multiple_tps': 0}
+                    lbl2data[lbl] = {'X': [], 'Y': [], 'multiple_tps': 0, 'doc_anns': []}
                 X = lbl2data[lbl]['X']
                 Y = lbl2data[lbl]['Y']
+                lbl2data[lbl]['doc_anns'].append({'d': fk, 'ann': a, 'label': self.label})
                 Y.append([1 if matched else 0])
                 extra_dims = [1] if len(cr.get_containing_anns(a)) > 0 else [0]
                 X.append(self.encode_ann(a, context_anns, lbl=lbl, extra_dims=extra_dims))
@@ -1338,16 +1399,23 @@ class LabelModel(object):
             logging.info('model file saved to %s' % output_file)
 
     @staticmethod
-    def predict_use_simple_stats(tp_ratio, Y, multiple_tps, performance, ratio_cut_off=0.15, separate_performance=None):
+    def predict_use_simple_stats(tp_ratio, Y, multiple_tps, performance, ratio_cut_off=0.15, separate_performance=None,
+                                 id2conll=None, doc_anns=None, file_pattern=None, doc_folder=None,
+                                 label_whitelist=None):
         P = numpy.ones(len(Y)) if tp_ratio >= ratio_cut_off else numpy.zeros(len(Y))
         if multiple_tps > 0:
             performance.increase_true_positive(multiple_tps)
             if separate_performance is not None:
                 separate_performance.increase_true_positive(multiple_tps)
-        LabelModel.cal_performance(P, Y, performance, separate_performance)
+        LabelModel.cal_performance(P, Y, performance, separate_performance,
+                                   id2conll=id2conll, doc_anns=doc_anns, file_pattern=file_pattern,
+                                   doc_folder=doc_folder,
+                                   label_whitelist=label_whitelist)
 
     @staticmethod
-    def cal_performance(P, Y, performance, separate_performance=None):
+    def cal_performance(P, Y, performance, separate_performance=None,
+                        id2conll=None, doc_anns=None, file_pattern=None, doc_folder=None, label_whitelist=None):
+        doc2predicted = {}
         for idx in xrange(len(P)):
             if P[idx] == Y[idx]:
                 if P[idx] == 1.0:
@@ -1362,10 +1430,28 @@ class LabelModel(object):
                 performance.increase_false_negative()
                 if separate_performance is not None:
                     separate_performance.increase_false_negative()
+            if P[idx] == 1.0 and id2conll is not None and doc_anns is not None and doc_folder is not None:
+                d = doc_anns[idx]['d']
+                labeled_ann = {'label': doc_anns[idx]['label'],
+                               'ann': doc_anns[idx]['ann']}
+                if d not in doc2predicted:
+                    doc2predicted[d] = [labeled_ann]
+                else:
+                    doc2predicted[d].append(labeled_ann)
+        for d in doc2predicted:
+            if d not in id2conll:
+                id2conll[d] = ConllDoc(join(doc_folder, file_pattern % d))
+                if label_whitelist is not None:
+                    id2conll[d].set_label_white_list(label_whitelist)
+            cnll = id2conll[d]
+            for anns in doc2predicted[d]:
+                cnll.add_predicted_labels(anns)
+
 
     @staticmethod
     def predict_use_model(X, Y, fns, multiple_tps, model_file, performance,
-                          pca_model_file=None, separate_performance=None):
+                          pca_model_file=None, separate_performance=None,
+                          id2conll=None, doc_anns=None, file_pattern=None, doc_folder=None, label_whitelist=None):
         all_true = False
         if not isfile(model_file):
             logging.info('model file NOT FOUND: %s' % model_file)
@@ -1390,7 +1476,9 @@ class LabelModel(object):
             P = numpy.ones(len(X))
         else:
             logging.info('instance size %s' % len(P))
-        LabelModel.cal_performance(P, Y, performance, separate_performance)
+        LabelModel.cal_performance(P, Y, performance, separate_performance,
+                                   id2conll=id2conll, doc_anns=doc_anns, file_pattern=file_pattern,
+                                   doc_folder=doc_folder, label_whitelist=label_whitelist)
 
 
 class BinaryClusterClassifier(object):
@@ -1699,7 +1787,10 @@ def predict_label(model_file, test_ann_dir, test_gold_dir, ml_model_file_ptn, pe
                   ignore_mappings=[],
                   ignore_context=False,
                   separate_by_label=False,
-                  full_text_dir=None):
+                  full_text_dir=None,
+                  file_pattern='%s-ann.xml',
+                  id2conll=None,
+                  label_whitelist=None):
     lm = LabelModel.deserialise(model_file)
     lm.max_dimensions = max_dimension
     data = lm.load_data(test_ann_dir, test_gold_dir, ignore_mappings=ignore_mappings, ignore_context=ignore_context,
@@ -1710,10 +1801,14 @@ def predict_label(model_file, test_ann_dir, test_gold_dir, ml_model_file_ptn, pe
         X = data['lbl2data'][lbl]['X']
         Y = data['lbl2data'][lbl]['Y']
         mtp = data['lbl2data'][lbl]['multiple_tps']
+        doc_anns = data['lbl2data'][lbl]['doc_anns']
         if lbl in lm.rare_labels:
             logging.info('%s to be predicted using %s' % (lbl, lm.rare_labels[lbl]))
             LabelModel.predict_use_simple_stats(lm.rare_labels[lbl], Y, mtp,
-                                                performance, separate_performance=this_performance)
+                                                performance, separate_performance=this_performance,
+                                                id2conll=id2conll, doc_anns=doc_anns, file_pattern=file_pattern,
+                                                doc_folder=test_gold_dir,
+                                                label_whitelist=label_whitelist)
         else:
             if len(X) > 0:
                 logging.debug('%s, dimensions %s' % (lbl, len(X[0])))
@@ -1727,7 +1822,10 @@ def predict_label(model_file, test_ann_dir, test_gold_dir, ml_model_file_ptn, pe
                     logging.debug('%s => %s' % (bc.classify(X[idx], complementary_classifiers=complementary_classifiers), Y[idx]))
             lm.predict_use_model(X, Y, 0, mtp, ml_model_file_ptn % escape_lable_to_filename(lbl), performance,
                                  pca_model_file=pca_model_file,
-                                 separate_performance=this_performance)
+                                 separate_performance=this_performance,
+                                 id2conll=id2conll, doc_anns=doc_anns, file_pattern=file_pattern,
+                                 doc_folder=test_gold_dir,
+                                 label_whitelist=label_whitelist)
         lbl2performances[lbl] = this_performance
     CustomisedRecoginiser.print_performances(lbl2performances)
     logging.debug('missed instances: %s' % data['fns'])
@@ -1766,8 +1864,9 @@ def populate_validation_results():
     CustomisedRecoginiser.print_performances(label2performances)
 
 
-def do_learn_exp(viz_file, num_dimensions=[20], ignore_context=False, separate_by_label=False):
+def do_learn_exp(viz_file, num_dimensions=[20], ignore_context=False, separate_by_label=False, conll_output_file=None):
     results = {}
+    id2conll = {}
     for lbl in _labels:
         logging.info('working on [%s]' % lbl)
         _learning_model_file = _learning_model_dir + '/%s.lm' % lbl
@@ -1811,8 +1910,19 @@ def do_learn_exp(viz_file, num_dimensions=[20], ignore_context=False, separate_b
                           ignore_mappings=ignore_mappings,
                           ignore_context=ignore_context,
                           separate_by_label=separate_by_label,
-                          full_text_dir=_test_text_dir)
+                          full_text_dir=_test_text_dir,
+                          id2conll=id2conll,
+                          label_whitelist=_labels)
         CustomisedRecoginiser.print_performances(results)
+    conll_output = ''
+    for id in id2conll:
+        doc_output = id2conll[id].conll_output
+        conll_output += doc_output + '\n'
+        logging.info('doc [%s]' % id)
+        logging.info(doc_output)
+    if conll_output_file is not None:
+        utils.save_string(conll_output, conll_output_file)
+        logging.info('conll_output saved to [%s]' % conll_output_file)
 
 
 def save_text_files(xml_dir, text_dr):
@@ -1850,7 +1960,7 @@ def merge_mappings_dictionary(map_files, dict_dirs, new_map_file, new_dict_folde
 
 if __name__ == "__main__":
     logging.basicConfig(level='INFO', format='[%(filename)s:%(lineno)d] %(name)s %(asctime)s %(message)s')
-    ss = StrokeSettings('./settings/ess_annotator1.json')
+    ss = StrokeSettings('./settings/tayside_ext.json')
     settings = ss.settings
     _min_sample_size = settings['min_sample_size']
     _ann_dir = settings['ann_dir']
@@ -1864,7 +1974,7 @@ if __name__ == "__main__":
     _labels = utils.read_text_file(settings['entity_types_file'])
     _ignore_mappings = utils.load_json_data(settings['ignore_mapping_file'])
     _cm_obj = Concept2Mapping(_concept_mapping)
-    _cm_obj.load_gaz_dir(settings['concept_gaz_dir'])
+    # _cm_obj.load_gaz_dir(settings['concept_gaz_dir'])
 
     # 0. merging mapping & dictionaries
     # merge_mappings_dictionary(['/afs/inf.ed.ac.uk/group/project/biomedTM/users/hwu/tayside_concept_mapping.json',
@@ -1886,4 +1996,5 @@ if __name__ == "__main__":
     do_learn_exp(settings['viz_file'],
                  num_dimensions=[30],
                  ignore_context=settings['ignore_context'] if 'ignore_context' in settings else False,
-                 separate_by_label=True)
+                 separate_by_label=True,
+                 conll_output_file=settings['conll_output_file'])
