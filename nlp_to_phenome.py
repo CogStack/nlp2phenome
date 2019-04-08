@@ -131,11 +131,15 @@ class ConllDoc(EDIRDoc):
 
     @property
     def conll_output(self):
-        return '\n'.join([' '.join([t['t'], str(len(t['predicted_label'])), t['gold_label'],
-                                    (('B-' if t['predicted_label'][-1]['ann'].start == t['offset'] else 'I-') +
-                                     t['predicted_label'][-1]['label'] )
-                                    if len(t['predicted_label']) > 0 else 'O'])
-                          for t in self.get_token_list()])
+        try:
+            return '\n'.join([' '.join([t['t'], str(len(t['predicted_label'])), t['gold_label'],
+                                        (('B-' if t['predicted_label'][-1]['ann'].start == t['offset'] else 'I-') +
+                                         t['predicted_label'][-1]['label'] )
+                                        if len(t['predicted_label']) > 0 else 'O'])
+                              for t in self.get_token_list()])
+        except:
+            logging.error('processing [%s] failed' % self.file_path)
+            return ''
 
     def get_token_list(self):
         if self._tokens is not None:
@@ -143,6 +147,8 @@ class ConllDoc(EDIRDoc):
         self._tokens = []
         start_offset = -1
         root = self._root
+        work_ess = list(self.get_ess_entities())
+        matched_ess = set()
         for p in root.findall('.//p'):
             for s in p:
                 if 'proc' in s.attrib: # and s.attrib['proc'] == 'yes':
@@ -153,15 +159,22 @@ class ConllDoc(EDIRDoc):
                         offset = id_val - start_offset
                         token = {'t': w.text, 'id': w.attrib['id'], 'offset': offset,
                                  'gold_label': 'O', 'predicted_label': []}
-                        for e in self.get_ess_entities():
-                            label = e.type.replace('neg_', '')
+                        for e in work_ess:
+                            label = e.type.replace('neg_', '').lower().strip()
                             if self._label_white_list is not None and label not in self._label_white_list:
                                 continue
                             if token['offset'] == e.start:
                                 token['gold_label'] = 'B-' + label
+                                matched_ess.add(e)
                             elif e.start < token['offset'] < e.end:
                                 token['gold_label'] = 'I-' + label
+                                matched_ess.add(e)
                         self._tokens.append(token)
+        left_ess = [e for e in work_ess if e not in matched_ess
+                    and e.type.replace('neg_', '') in self._label_white_list]
+        if len(left_ess) > 0:
+            logging.error('leftovers: [%s] at %s' % (
+                '\n'.join(['%s (%s,%s)' % (a.type, a.start, a.end) for a in left_ess]), self.file_path))
         return self._tokens
 
     def add_predicted_labels(self, predicted_label):
@@ -1194,7 +1207,7 @@ class LabelModel(object):
             if p['c'] == 0 or (1.0 * p['w'] / p['c'] < 0.05):
                 bad_labels.append(ql)
         return {'lbl2data': lbl2data,
-                'fns': false_negatives, 'bad_labels': bad_labels}
+                'fns': false_negatives, 'bad_labels': bad_labels, 'files': file_keys}
 
     def serialise(self, output_file):
         jl.dump(self, output_file)
@@ -1795,6 +1808,13 @@ def predict_label(model_file, test_ann_dir, test_gold_dir, ml_model_file_ptn, pe
     lm.max_dimensions = max_dimension
     data = lm.load_data(test_ann_dir, test_gold_dir, ignore_mappings=ignore_mappings, ignore_context=ignore_context,
                         separate_by_label=separate_by_label, verbose=False, ful_text_dir=full_text_dir)
+
+    files = data['files']
+    for d in files:
+        if d not in id2conll:
+            id2conll[d] = ConllDoc(join(test_gold_dir, file_pattern % d))
+            if label_whitelist is not None:
+                id2conll[d].set_label_white_list(label_whitelist)
     lbl2performances = {}
     for lbl in data['lbl2data']:
         this_performance = LabelPerformance(lbl)
@@ -1920,6 +1940,8 @@ def do_learn_exp(viz_file, num_dimensions=[20], ignore_context=False, separate_b
         conll_output += doc_output + '\n'
         logging.info('doc [%s]' % id)
         logging.info(doc_output)
+
+    logging.info('total processed %s docs' % len(id2conll))
     if conll_output_file is not None:
         utils.save_string(conll_output, conll_output_file)
         logging.info('conll_output saved to [%s]' % conll_output_file)
@@ -1960,7 +1982,7 @@ def merge_mappings_dictionary(map_files, dict_dirs, new_map_file, new_dict_folde
 
 if __name__ == "__main__":
     logging.basicConfig(level='INFO', format='[%(filename)s:%(lineno)d] %(name)s %(asctime)s %(message)s')
-    ss = StrokeSettings('./settings/tayside_ext.json')
+    ss = StrokeSettings('./settings/tayside_annotator1.json')
     settings = ss.settings
     _min_sample_size = settings['min_sample_size']
     _ann_dir = settings['ann_dir']
