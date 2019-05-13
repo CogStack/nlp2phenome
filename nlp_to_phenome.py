@@ -339,6 +339,18 @@ class PhenotypeAnn(ContextedAnn):
     def minor_type(self, value):
         self._minor_type = value
 
+    def to_dict(self):
+        return {
+            'str': self.str,
+            'start': self.start,
+            'end': self.end,
+            'negation': self.negation,
+            'temporality': self.temporality,
+            'experiencer': self.experiencer,
+            'majorType': self.major_type,
+            'minorType': self.minor_type
+        }
+
 
 class SemEHRAnn(ContextedAnn):
     """
@@ -1209,6 +1221,45 @@ class LabelModel(object):
         return {'lbl2data': lbl2data,
                 'fns': false_negatives, 'bad_labels': bad_labels, 'files': file_keys}
 
+    def load_data_for_predict(self, ann_dir, concept_mapping_file, ignore_mappings=[], ignore_context=False,
+                              separate_by_label=False, full_text_dir=None):
+        """
+        load data for prediction - no ground truth exists
+        :param ann_dir:
+        :param ignore_mappings:
+        :param ignore_context:
+        :param separate_by_label:
+        :param full_text_dir:
+        :return:
+        """
+        if ignore_context:
+            logging.info('doing learning without considering contextual info')
+
+        cm = Concept2Mapping(concept_mapping_file)
+        file_keys = [f.split('.')[0] for f in listdir(ann_dir) if isfile(join(ann_dir, f))]
+        lbl2data = {}
+        for fk in file_keys:
+            cr = CustomisedRecoginiser(join(ann_dir, '%s.json' % fk), cm)
+            if full_text_dir is not None:
+                cr.full_text_folder = full_text_dir
+
+            anns = cr.get_anns_by_label(self.label, ignore_mappings=ignore_mappings, no_context=ignore_context)
+            for a in anns:
+                t2anns = cr.get_prior_anns(a)
+                context_anns = [] + t2anns['umls'] + t2anns['phenotype'] + \
+                               cr.get_context_words(a, fk)
+                if separate_by_label:
+                    lbl = LabelModel.get_ann_query_label(a)
+                else:
+                    lbl = 'united'
+                if lbl not in lbl2data:
+                    lbl2data[lbl] = {'X': [], 'Y': [], 'multiple_tps': 0, 'doc_anns': []}
+                X = lbl2data[lbl]['X']
+                lbl2data[lbl]['doc_anns'].append({'d': fk, 'ann': a, 'label': self.label})
+                extra_dims = [1] if len(cr.get_containing_anns(a)) > 0 else [0]
+                X.append(self.encode_ann(a, context_anns, lbl=lbl, extra_dims=extra_dims))
+        return {'lbl2data': lbl2data, 'files': file_keys}
+
     def serialise(self, output_file):
         jl.dump(self, output_file)
 
@@ -1426,6 +1477,24 @@ class LabelModel(object):
                                    label_whitelist=label_whitelist)
 
     @staticmethod
+    def predict_use_simple_stats_in_action(tp_ratio, item_size, ratio_cut_off=0.15,
+                                           doc2predicted=None, doc_anns=None):
+        P = numpy.ones(item_size) if tp_ratio >= ratio_cut_off else numpy.zeros(item_size)
+        LabelModel.collect_prediction(P, doc2predicted=doc2predicted, doc_anns=doc_anns)
+
+    @staticmethod
+    def collect_prediction(P, doc_anns, doc2predicted):
+        for idx in xrange(len(P)):
+            if P[idx] == 1.0 and doc_anns is not None:
+                d = doc_anns[idx]['d']
+                labeled_ann = {'label': doc_anns[idx]['label'],
+                               'ann': doc_anns[idx]['ann']}
+                if d not in doc2predicted:
+                    doc2predicted[d] = [labeled_ann]
+                else:
+                    doc2predicted[d].append(labeled_ann)
+
+    @staticmethod
     def cal_performance(P, Y, performance, separate_performance=None,
                         id2conll=None, doc_anns=None, file_pattern=None, doc_folder=None, label_whitelist=None):
         doc2predicted = {}
@@ -1492,6 +1561,29 @@ class LabelModel(object):
         LabelModel.cal_performance(P, Y, performance, separate_performance,
                                    id2conll=id2conll, doc_anns=doc_anns, file_pattern=file_pattern,
                                    doc_folder=doc_folder, label_whitelist=label_whitelist)
+
+    @staticmethod
+    def predict_use_model_in_action(X, model_file, pca_model_file=None,
+                                    doc2predicted=None, doc_anns=None):
+        all_true = False
+        if not isfile(model_file):
+            logging.info('model file NOT FOUND: %s' % model_file)
+            all_true = True
+        else:
+            if pca_model_file is not None:
+                pca = jl.load(pca_model_file)
+                X_new = pca.transform(X)
+            else:
+                X_new = X
+            m = jl.load(model_file)
+            P = m.predict(X_new)
+
+        if all_true: # or len(X) <= _min_sample_size:
+            logging.warn('using querying instead of predicting')
+            P = numpy.ones(len(X))
+        else:
+            logging.info('instance size %s' % len(P))
+        LabelModel.collect_prediction(P, doc2predicted=doc2predicted, doc_anns=doc_anns)
 
 
 class BinaryClusterClassifier(object):
@@ -1898,9 +1990,9 @@ def do_learn_exp(viz_file, num_dimensions=[20], ignore_context=False, separate_b
         t = lbl.replace('neg_', '')
         ignore_mappings = _ignore_mappings[t] if t in _ignore_mappings else []
         # remove previous model files
-        logging.debug('removing previously learnt models...')
-        for f in [f for f in listdir(_learning_model_dir) if isfile(join(_learning_model_dir, f)) and f.endswith('.model')]:
-            remove(join(_learning_model_dir, f))
+        # logging.debug('removing previously learnt models...')
+        # for f in [f for f in listdir(_learning_model_dir) if isfile(join(_learning_model_dir, f)) and f.endswith('.model')]:
+        #     remove(join(_learning_model_dir, f))
         for dim in max_dimensions:
             logging.info('dimension setting: %s' % dim)
             learn_prediction_model(lbl,
@@ -1982,7 +2074,7 @@ def merge_mappings_dictionary(map_files, dict_dirs, new_map_file, new_dict_folde
 
 if __name__ == "__main__":
     logging.basicConfig(level='INFO', format='[%(filename)s:%(lineno)d] %(name)s %(asctime)s %(message)s')
-    ss = StrokeSettings('./settings/tayside_annotator1.json')
+    ss = StrokeSettings('./settings/ess_annotator1.json')
     settings = ss.settings
     _min_sample_size = settings['min_sample_size']
     _ann_dir = settings['ann_dir']
