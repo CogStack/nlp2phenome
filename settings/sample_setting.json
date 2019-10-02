@@ -11,5 +11,6 @@
   "ignore_mapping_file": "where is the optional json file for ignoring the above mappings",
   "min_sample_size": 25,
   "viz_file": "where is the PDF file for visualising decision trees learnt",
-  "gazetteer_dir": "where is the complementary gazetteer files to be saved"
+  "gazetteer_dir": "where is the complementary gazetteer files to be saved",
+  "eHostGD": true
 }
