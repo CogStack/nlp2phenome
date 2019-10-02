@@ -25,6 +25,7 @@ import graphviz
 import numpy
 import logging
 import re
+import reportreader as rr
 
 
 class EDIRDoc(object):
@@ -113,6 +114,38 @@ class EDIRDoc(object):
             ann.negated = negated
             ann.id = len(entities)
             entities.append(ann)
+        self._entities = entities
+        return self._entities
+
+
+class eHostDoc(EDIRDoc):
+    def __init__(self, file_path):
+        super(eHostDoc, self).__init__(file_path)
+
+    def get_ess_entities(self):
+        if self._entities is not None:
+            return self._entities
+        root = self._root
+        entities = []
+        for e in root.findall('.//classMention'):
+            mcs = e.findall('./mentionClass')
+            mention_id = e.attrib['id']
+            if len(mcs) > 0:
+                mc = mcs[0]
+                m = re.match(r'Verified\_([^\(]+)\(.*\)', mc.attrib['id'])
+                if m is not None:
+                    cls = m.group(1)
+                    print './/mention[@id="' + mention_id + '"]/..'
+                    mentions = root.findall('.//mention[@id="' + mention_id + '"]/..')
+                    if len(mentions) > 0:
+                        span = mentions[0].findall('./span')
+                        ent_start = span[0].attrib['start']
+                        ent_end = span[0].attrib['end']
+                        spannedText = mentions[0].findall('./spannedText')
+                        str = spannedText[0].text
+                        ann = EDIRAnn(str=str, start=ent_start, end=ent_end, type=cls)
+                        ann.id = len(entities)
+                        entities.append(ann)
         self._entities = entities
         return self._entities
 
@@ -707,6 +740,22 @@ class CustomisedRecoginiser(SemEHRAnnDoc):
                 else:
                     break
                 idx += 1
+
+            # use dependency tree to get context words
+            abss = rr.AbstractedSentence(1)
+            abss.text = s
+            result = abss.get_abstaction_by_pos(ann.start, rr.get_nlp_instance())
+            dep_words = []
+            if result is not None:
+                # root verb
+                dep_words.append(result.root.text if result.root is not None else 'empty')
+                # subject
+                dep_words.append(result.subject[0].text if len(result.subject) > 0 else 'empty')
+                # first verb other than root verb
+                dep_words.append(result.verbs[0].text if len(result.verbs) > 0 else 'empty')
+                # first child
+                dep_words.append(result.children[0].text if len(result.children) > 0 else 'empty')
+            words += dep_words
         if len(words) == 0:
             words =['empty']
         return words
@@ -1014,7 +1063,8 @@ class LabelModel(object):
                 for c in context_anns:
                     self.add_context_dimension_by_annotation(c)
 
-    def collect_tfidf_dimensions(self, ann_dir, gold_dir, ignore_context=False, separate_by_label=False, full_text_dir=None):
+    def collect_tfidf_dimensions(self, ann_dir, gold_dir, ignore_context=False, separate_by_label=False,
+                                 full_text_dir=None, eHostGD=False):
         cm = Concept2Mapping(_concept_mapping)
         file_keys = [f.split('.')[0] for f in listdir(ann_dir) if isfile(join(ann_dir, f))]
         # collect dimension labels
@@ -1026,9 +1076,14 @@ class LabelModel(object):
             cr = CustomisedRecoginiser(join(ann_dir, '%s.json' % fk), cm)
             if full_text_dir is not None:
                 cr.full_text_folder = full_text_dir
-            gd = EDIRDoc(join(gold_dir, '%s-ann.xml' % fk))
-            if not isfile(join(gold_dir, '%s-ann.xml' % fk)):
-                continue
+            if eHostGD:
+                if not isfile(join(gold_dir, '%s.knowtator.xml' % fk)):
+                    continue
+                gd = eHostDoc(join(gold_dir, '%s.knowtator.xml' % fk))
+            else:
+                if not isfile(join(gold_dir, '%s-ann.xml' % fk)):
+                    continue
+                gd = EDIRDoc(join(gold_dir, '%s-ann.xml' % fk))
             t = self.label.replace('neg_', '')
             anns = cr.get_anns_by_label(t)
             neg_anns = cr.get_anns_by_label('neg_' + t)
@@ -1129,7 +1184,7 @@ class LabelModel(object):
         return sorted(lbls, key=lambda x : x[1])
 
     def load_data(self, ann_dir, gold_dir, verbose=True, ignore_mappings=[], ignore_context=False,
-                  separate_by_label=False, ful_text_dir=None):
+                  separate_by_label=False, ful_text_dir=None, eHostGD=False):
         if ignore_context:
             logging.info('doing learning without considering contextual info')
         # print self.get_top_tfidf_dimensions(self.max_dimensions)
@@ -1144,9 +1199,14 @@ class LabelModel(object):
             cr = CustomisedRecoginiser(join(ann_dir, '%s.json' % fk), cm)
             if ful_text_dir is not None:
                 cr.full_text_folder = ful_text_dir
-            if not isfile(join(gold_dir, '%s-ann.xml' % fk)):
-                continue
-            gd = EDIRDoc(join(gold_dir, '%s-ann.xml' % fk))
+            if eHostGD:
+                if not isfile(join(gold_dir, '%s.knowtator.xml' % fk)):
+                    continue
+                gd = eHostDoc(join(gold_dir, '%s.knowtator.xml' % fk))
+            else:
+                if not isfile(join(gold_dir, '%s-ann.xml' % fk)):
+                    continue
+                gd = EDIRDoc(join(gold_dir, '%s-ann.xml' % fk))
 
             not_matched_gds = []
             for e in gd.get_ess_entities():
@@ -1715,7 +1775,6 @@ class StrokeSettings(object):
         return self._setting
 
 
-
 def extract_doc_level_ann(ann_dump, output_folder):
     """
 
@@ -1822,7 +1881,8 @@ def learn_prediction_model(label, ann_dir=None, gold_dir=None, model_file=None, 
                            pca_model_file=None,
                            max_dimension=None,
                            ignore_mappings=[],
-                           viz_file=None, ignore_context=False, separate_by_label=False, full_text_dir=None):
+                           viz_file=None, ignore_context=False, separate_by_label=False, full_text_dir=None,
+                           eHOSTGD=False):
     model_changed = False
     if model_file is not None:
         lm = LabelModel.deserialise(model_file)
@@ -1830,7 +1890,7 @@ def learn_prediction_model(label, ann_dir=None, gold_dir=None, model_file=None, 
         model_changed = True
         lm = LabelModel(label)
         lm.collect_tfidf_dimensions(ann_dir=ann_dir, gold_dir=gold_dir, ignore_context=ignore_context,
-                                    separate_by_label=separate_by_label, full_text_dir=full_text_dir)
+                                    separate_by_label=separate_by_label, full_text_dir=full_text_dir, eHOSTGD=eHOSTGD)
     lm.use_one_dimension_for_label = False
     lm.max_dimensions = max_dimension
     if ann_dir is not None:
@@ -1838,7 +1898,7 @@ def learn_prediction_model(label, ann_dir=None, gold_dir=None, model_file=None, 
         # logging.info(bad_lables)
         bad_lables = []
         data = lm.load_data(ann_dir, gold_dir, ignore_mappings=bad_lables, ignore_context=ignore_context,
-                            separate_by_label=separate_by_label, ful_text_dir=full_text_dir)
+                            separate_by_label=separate_by_label, ful_text_dir=full_text_dir, eHOSTGD=eHOSTGD)
         # if separate_by_label:
         for lbl in data['lbl2data']:
             X = data['lbl2data'][lbl]['X']
@@ -2072,6 +2132,10 @@ def merge_mappings_dictionary(map_files, dict_dirs, new_map_file, new_dict_folde
     logging.info('all done')
 
 
+def test_eHost_doc():
+    d = eHostDoc('/Users/honghan.wu/Desktop/ehost_sample.xml')
+    print [(e.label, e.start, e.end, e.str) for e in d.get_ess_entities()]
+
 if __name__ == "__main__":
     logging.basicConfig(level='INFO', format='[%(filename)s:%(lineno)d] %(name)s %(asctime)s %(message)s')
     ss = StrokeSettings('./settings/ess_annotator1.json')
@@ -2087,6 +2151,7 @@ if __name__ == "__main__":
     _learning_model_dir = settings['learning_model_dir']
     _labels = utils.read_text_file(settings['entity_types_file'])
     _ignore_mappings = utils.load_json_data(settings['ignore_mapping_file'])
+    _eHostGD = settings['eHostGD'] if 'eHostGD' in settings else False
     _cm_obj = Concept2Mapping(_concept_mapping)
     # _cm_obj.load_gaz_dir(settings['concept_gaz_dir'])
 
@@ -2111,4 +2176,4 @@ if __name__ == "__main__":
                  num_dimensions=[30],
                  ignore_context=settings['ignore_context'] if 'ignore_context' in settings else False,
                  separate_by_label=True,
-                 conll_output_file=settings['conll_output_file'])
+                 conll_output_file=settings['conll_output_file'], _eHostGD=_eHostGD)
