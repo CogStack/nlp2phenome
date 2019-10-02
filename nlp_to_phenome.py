@@ -243,6 +243,15 @@ class BasicAnn(object):
         return self.start <= other_ann.start and self.end >= other_ann.end \
                and not (self.start == other_ann.start and self.end == other_ann.end)
 
+    def serialise_json(self):
+        return {'start': self.start, 'end': self.end, 'str': self.str, 'id': self.id}
+
+    @staticmethod
+    def deserialise(jo):
+        ann = BasicAnn(jo['start'], jo['start'], jo['end'])
+        ann.id = jo['id']
+        return ann
+
 
 class EDIRAnn(BasicAnn):
     """
@@ -311,6 +320,13 @@ class ContextedAnn(BasicAnn):
     def experiencer(self, value):
         self._exp = value
 
+    def serialise_json(self):
+        dict = super(ContextedAnn, self).serialise_json()
+        dict['negation'] = self.negation
+        dict['temporality'] = self.temporality
+        dict['experiencer'] = self.experiencer
+        return dict
+
 
 class PhenotypeAnn(ContextedAnn):
     """
@@ -350,6 +366,19 @@ class PhenotypeAnn(ContextedAnn):
             'majorType': self.major_type,
             'minorType': self.minor_type
         }
+
+    def serialise_json(self):
+        dict = super(PhenotypeAnn, self).serialise_json()
+        dict['major_type'] = self.major_type
+        dict['minor_type'] = self.minor_type
+        return dict
+
+    @staticmethod
+    def deserialise(jo):
+        ann = PhenotypeAnn(jo['str'], jo['start'], jo['end'], jo['negation'], jo['temporality'],
+                           jo['experiencer'], jo['major_type'], jo['minor_type'])
+        ann.id = jo['id']
+        return ann
 
 
 class SemEHRAnn(ContextedAnn):
@@ -397,6 +426,26 @@ class SemEHRAnn(ContextedAnn):
     def pref(self, value):
         self._pref = value
 
+    def serialise_json(self):
+        dict = super(SemEHRAnn, self).serialise_json()
+        dict['sty'] = self.sty
+        dict['cui'] = self.cui
+        dict['pref'] = self.pref
+        dict['study_concepts'] = self.study_concepts
+        dict['ruled_by'] = self.ruled_by
+        return dict
+
+    @staticmethod
+    def deserialise(jo):
+        ann = SemEHRAnn(jo['str'], jo['start'], jo['end'], jo['negation'], jo['temporality'],
+                        jo['experiencer'], jo['cui'], jo['sty'], jo['pref'], 'mention')
+        ann.id = jo['id']
+        if 'ruled_by' in jo:
+            ann._ruled_by = jo['ruled_by']
+        if 'study_concepts' in jo:
+            ann._study_concepts = jo['study_concepts']
+        return ann
+
 
 class SemEHRAnnDoc(object):
     """
@@ -413,26 +462,18 @@ class SemEHRAnnDoc(object):
     def load_anns(self):
         all_anns = self._anns
         panns = self._phenotype_anns
-        for anns in self._doc['annotations']:
-            for ann in anns:
-                t = ann['type']
-                if t == 'Mention':
-                    a = SemEHRAnn(ann['features']['string_orig'],
-                                  int(ann['startNode']['offset']),
-                                  int(ann['endNode']['offset']),
-
-                                  ann['features']['Negation'],
-                                  ann['features']['Temporality'],
-                                  ann['features']['Experiencer'],
-
-                                  ann['features']['inst'],
-                                  ann['features']['STY'],
-                                  ann['features']['PREF'],
-                                  t)
-                    all_anns.append(a)
-                    a.id = 'cui-%s' % len(all_anns)
-                elif t == 'Phenotype':
-                    a = PhenotypeAnn(ann['features']['string_orig'],
+        if 'sentences' in self._doc:
+            # is a SemEHRAnnDoc serialisation
+            self._anns = [SemEHRAnn.deserialise(a) for a in self._doc['annotations']]
+            if 'phenotypes' in self._doc:
+                self._phenotype_anns = [PhenotypeAnn.deserialise(a) for a in self._doc['phenotypes']]
+            self._sentences = [BasicAnn.deserialise(a) for a in self._doc['sentences']]
+        else:
+            for anns in self._doc['annotations']:
+                for ann in anns:
+                    t = ann['type']
+                    if t == 'Mention':
+                        a = SemEHRAnn(ann['features']['string_orig'],
                                       int(ann['startNode']['offset']),
                                       int(ann['endNode']['offset']),
 
@@ -440,21 +481,36 @@ class SemEHRAnnDoc(object):
                                       ann['features']['Temporality'],
                                       ann['features']['Experiencer'],
 
-                                      ann['features']['majorType'],
-                                      ann['features']['minorType'])
-                    panns.append(a)
-                    # SemEHRAnnDoc.keep_max_len_anns(panns)
-                    a.id = 'phe-%s' % len(panns)
-                elif t == 'Sentence':
-                    a = BasicAnn('Sentence',
-                                 int(ann['startNode']['offset']),
-                                 int(ann['endNode']['offset']))
-                    self._sentences.append(a)
-                    a.id = 'sent-%s' % len(self._sentences)
-                else:
-                    self._others.append(ann)
-        SemEHRAnnDoc.keep_max_len_anns(panns)
-        sorted(all_anns, key=lambda x: x.start)
+                                      ann['features']['inst'],
+                                      ann['features']['STY'],
+                                      ann['features']['PREF'],
+                                      t)
+                        all_anns.append(a)
+                        a.id = 'cui-%s' % len(all_anns)
+                    elif t == 'Phenotype':
+                        a = PhenotypeAnn(ann['features']['string_orig'],
+                                          int(ann['startNode']['offset']),
+                                          int(ann['endNode']['offset']),
+
+                                          ann['features']['Negation'],
+                                          ann['features']['Temporality'],
+                                          ann['features']['Experiencer'],
+
+                                          ann['features']['majorType'],
+                                          ann['features']['minorType'])
+                        panns.append(a)
+                        # SemEHRAnnDoc.keep_max_len_anns(panns)
+                        a.id = 'phe-%s' % len(panns)
+                    elif t == 'Sentence':
+                        a = BasicAnn('Sentence',
+                                     int(ann['startNode']['offset']),
+                                     int(ann['endNode']['offset']))
+                        self._sentences.append(a)
+                        a.id = 'sent-%s' % len(self._sentences)
+                    else:
+                        self._others.append(ann)
+            SemEHRAnnDoc.keep_max_len_anns(panns)
+            sorted(all_anns, key=lambda x: x.start)
 
     @property
     def annotations(self):
