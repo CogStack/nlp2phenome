@@ -26,6 +26,7 @@ import numpy
 import logging
 import re
 import reportreader as rr
+import sys
 
 
 class EDIRDoc(object):
@@ -84,8 +85,8 @@ class EDIRDoc(object):
             else:
                 offset_start = int(e.attrib['id'][1:])
                 break
-        if offset_start == -1:
-            logging.debug('%s offset start could not be found' % self.file_path)
+        # if offset_start == -1:
+        #     logging.debug('%s offset start could not be found' % self.file_path)
         self._word_offset_start = offset_start
 
     def get_ess_entities(self):
@@ -117,6 +118,14 @@ class EDIRDoc(object):
         self._entities = entities
         return self._entities
 
+    def relocate_anns(self, t):
+        if self._entities is None:
+            return
+        for a in self._entities:
+            s, e = relocate_annotation_pos(t, a.start, a.end, a.str)
+            a.start = s
+            a.end = e
+
 
 class eHostDoc(EDIRDoc):
     def __init__(self, file_path):
@@ -135,7 +144,6 @@ class eHostDoc(EDIRDoc):
                 m = re.match(r'Verified\_([^\(]+)\(.*\)', mc.attrib['id'])
                 if m is not None:
                     cls = m.group(1)
-                    print './/mention[@id="' + mention_id + '"]/..'
                     mentions = root.findall('.//mention[@id="' + mention_id + '"]/..')
                     if len(mentions) > 0:
                         span = mentions[0].findall('./span')
@@ -143,7 +151,7 @@ class eHostDoc(EDIRDoc):
                         ent_end = span[0].attrib['end']
                         spannedText = mentions[0].findall('./spannedText')
                         str = spannedText[0].text
-                        ann = EDIRAnn(str=str, start=ent_start, end=ent_end, type=cls)
+                        ann = EDIRAnn(str=str, start=int(ent_start), end=int(ent_end), type=cls)
                         ann.id = len(entities)
                         entities.append(ann)
         self._entities = entities
@@ -276,6 +284,15 @@ class BasicAnn(object):
         return self.start <= other_ann.start and self.end >= other_ann.end \
                and not (self.start == other_ann.start and self.end == other_ann.end)
 
+    def serialise_json(self):
+        return {'start': self.start, 'end': self.end, 'str': self.str, 'id': self.id}
+
+    @staticmethod
+    def deserialise(jo):
+        ann = BasicAnn(jo['start'], jo['start'], jo['end'])
+        ann.id = jo['id']
+        return ann
+
 
 class EDIRAnn(BasicAnn):
     """
@@ -384,6 +401,19 @@ class PhenotypeAnn(ContextedAnn):
             'minorType': self.minor_type
         }
 
+    def serialise_json(self):
+        dict = super(PhenotypeAnn, self).serialise_json()
+        dict['major_type'] = self.major_type
+        dict['minor_type'] = self.minor_type
+        return dict
+
+    @staticmethod
+    def deserialise(jo):
+        ann = PhenotypeAnn(jo['str'], jo['start'], jo['end'], jo['negation'], jo['temporality'],
+                           jo['experiencer'], jo['major_type'], jo['minor_type'])
+        ann.id = jo['id']
+        return ann
+
 
 class SemEHRAnn(ContextedAnn):
     """
@@ -430,6 +460,17 @@ class SemEHRAnn(ContextedAnn):
     def pref(self, value):
         self._pref = value
 
+    @staticmethod
+    def deserialise(jo):
+        ann = SemEHRAnn(jo['str'], jo['start'], jo['end'], jo['negation'], jo['temporality'],
+                        jo['experiencer'], jo['cui'], jo['sty'], jo['pref'], 'mention')
+        ann.id = jo['id']
+        if 'ruled_by' in jo:
+            ann._ruled_by = jo['ruled_by']
+        if 'study_concepts' in jo:
+            ann._study_concepts = jo['study_concepts']
+        return ann
+
 
 class SemEHRAnnDoc(object):
     """
@@ -446,26 +487,18 @@ class SemEHRAnnDoc(object):
     def load_anns(self):
         all_anns = self._anns
         panns = self._phenotype_anns
-        for anns in self._doc['annotations']:
-            for ann in anns:
-                t = ann['type']
-                if t == 'Mention':
-                    a = SemEHRAnn(ann['features']['string_orig'],
-                                  int(ann['startNode']['offset']),
-                                  int(ann['endNode']['offset']),
-
-                                  ann['features']['Negation'],
-                                  ann['features']['Temporality'],
-                                  ann['features']['Experiencer'],
-
-                                  ann['features']['inst'],
-                                  ann['features']['STY'],
-                                  ann['features']['PREF'],
-                                  t)
-                    all_anns.append(a)
-                    a.id = 'cui-%s' % len(all_anns)
-                elif t == 'Phenotype':
-                    a = PhenotypeAnn(ann['features']['string_orig'],
+        if 'sentences' in self._doc:
+            # is a SemEHRAnnDoc serialisation
+            self._anns = [SemEHRAnn.deserialise(a) for a in self._doc['annotations']]
+            if 'phenotypes' in self._doc:
+                self._phenotype_anns = [PhenotypeAnn.deserialise(a) for a in self._doc['phenotypes']]
+            self._sentences = [BasicAnn.deserialise(a) for a in self._doc['sentences']]
+        else:
+            for anns in self._doc['annotations']:
+                for ann in anns:
+                    t = ann['type']
+                    if t == 'Mention':
+                        a = SemEHRAnn(ann['features']['string_orig'],
                                       int(ann['startNode']['offset']),
                                       int(ann['endNode']['offset']),
 
@@ -473,21 +506,36 @@ class SemEHRAnnDoc(object):
                                       ann['features']['Temporality'],
                                       ann['features']['Experiencer'],
 
-                                      ann['features']['majorType'],
-                                      ann['features']['minorType'])
-                    panns.append(a)
-                    # SemEHRAnnDoc.keep_max_len_anns(panns)
-                    a.id = 'phe-%s' % len(panns)
-                elif t == 'Sentence':
-                    a = BasicAnn('Sentence',
-                                 int(ann['startNode']['offset']),
-                                 int(ann['endNode']['offset']))
-                    self._sentences.append(a)
-                    a.id = 'sent-%s' % len(self._sentences)
-                else:
-                    self._others.append(ann)
-        SemEHRAnnDoc.keep_max_len_anns(panns)
-        sorted(all_anns, key=lambda x: x.start)
+                                      ann['features']['inst'],
+                                      ann['features']['STY'],
+                                      ann['features']['PREF'],
+                                      t)
+                        all_anns.append(a)
+                        a.id = 'cui-%s' % len(all_anns)
+                    elif t == 'Phenotype':
+                        a = PhenotypeAnn(ann['features']['string_orig'],
+                                         int(ann['startNode']['offset']),
+                                         int(ann['endNode']['offset']),
+
+                                         ann['features']['Negation'],
+                                         ann['features']['Temporality'],
+                                         ann['features']['Experiencer'],
+
+                                         ann['features']['majorType'],
+                                         ann['features']['minorType'])
+                        panns.append(a)
+                        a.id = 'phe-%s' % len(panns)
+                    elif t == 'Sentence':
+                        a = BasicAnn('Sentence',
+                                     int(ann['startNode']['offset']),
+                                     int(ann['endNode']['offset']))
+                        self._sentences.append(a)
+                        self._sentences = sorted(self._sentences, key=lambda x: x.start)
+                        a.id = 'sent-%s' % len(self._sentences)
+                    else:
+                        self._others.append(ann)
+
+            sorted(all_anns, key=lambda x: x.start)
 
     @property
     def annotations(self):
@@ -496,6 +544,10 @@ class SemEHRAnnDoc(object):
     @property
     def sentences(self):
         return self._sentences
+
+    @sentences.setter
+    def sentences(self, value):
+        self._sentences = value
 
     @property
     def phenotypes(self):
@@ -522,7 +574,7 @@ class SemEHRAnnDoc(object):
     @staticmethod
     def keep_max_len_anns(anns):
         ann2remove = set()
-        for idx in xrange(len(anns)):
+        for idx in range(len(anns)):
             a = anns[idx]
             for ni in range(idx + 1, len(anns)):
                 b = anns[ni]
@@ -663,7 +715,7 @@ class CustomisedRecoginiser(SemEHRAnnDoc):
                 sent = s
                 break
         if sent is None:
-            print 'sentence not found for %s' % ann.__dict__
+            print('sentence not found for %s' % ann.__dict__)
             return None
         return sent
 
@@ -721,8 +773,20 @@ class CustomisedRecoginiser(SemEHRAnnDoc):
         if self._full_text is None and self._full_text_folder is not None and self._full_text_file_pattern is not None:
             self._full_text = utils.read_text_file_as_string(
                 join(self._full_text_folder,
-                     self._full_text_file_pattern % fk))
+                     self._full_text_file_pattern % fk), encoding='cp1252')
         return self._full_text
+
+    def relocate_all_anns(self, fk):
+        t = self.get_full_text(fk)
+        for a in self.phenotypes + self.annotations:
+            s, e = relocate_annotation_pos(t, a.start, a.end, a.str)
+            a.start = s
+            a.end = e
+
+    def re_segment_sentences(self, fk):
+        text = self.get_full_text(fk)
+        if text is not None:
+            self.sentences = rr.get_sentences_as_anns(rr.get_nlp_instance(), text)
 
     def get_context_words(self, ann, file_key, n_words=1):
         sent = self.get_ann_sentence(ann)
@@ -730,31 +794,37 @@ class CustomisedRecoginiser(SemEHRAnnDoc):
         words = []
         if t is not None:
             s = t[sent.start:sent.end]
-            context_start = ann.start - sent.start + len(ann.str)
-            str = s[context_start:]
-            p = re.compile(r'\b(\w+)\b')
-            idx = 0
-            for m in p.finditer(str):
-                if idx <= n_words - 1:
-                    words.append(str[m.span(1)[0]:m.span(1)[1]])
-                else:
-                    break
-                idx += 1
+            # context_start = ann.start - sent.start + len(ann.str)
+            # str = s[context_start:]
+            # p = re.compile(r'\b(\w+)\b')
+            # idx = 0
+            # for m in p.finditer(str):
+            #     if idx <= n_words - 1:
+            #         words.append(str[m.span(1)[0]:m.span(1)[1]])
+            #     else:
+            #         break
+            #     idx += 1
 
             # use dependency tree to get context words
             abss = rr.AbstractedSentence(1)
             abss.text = s
-            result = abss.get_abstaction_by_pos(ann.start, rr.get_nlp_instance())
+            result = abss.get_abstaction_by_pos(abss.locate_pos(ann.str), rr.get_nlp_instance())
             dep_words = []
             if result is not None:
-                # root verb
-                dep_words.append(result.root.text if result.root is not None else 'empty')
                 # subject
                 dep_words.append(result.subject[0].text if len(result.subject) > 0 else 'empty')
+
                 # first verb other than root verb
                 dep_words.append(result.verbs[0].text if len(result.verbs) > 0 else 'empty')
+
+                # root verb
+                dep_words.append(result.root.text if result.root is not None else 'empty')
+
                 # first child
                 dep_words.append(result.children[0].text if len(result.children) > 0 else 'empty')
+            else:
+                dep_words += ['empty'] *4
+                logging.debug('not found [%s]' % s)
             words += dep_words
         if len(words) == 0:
             words =['empty']
@@ -1066,7 +1136,7 @@ class LabelModel(object):
     def collect_tfidf_dimensions(self, ann_dir, gold_dir, ignore_context=False, separate_by_label=False,
                                  full_text_dir=None, eHostGD=False):
         cm = Concept2Mapping(_concept_mapping)
-        file_keys = [f.split('.')[0] for f in listdir(ann_dir) if isfile(join(ann_dir, f))]
+        file_keys = [f[:f.rfind('.')] for f in listdir(ann_dir) if isfile(join(ann_dir, f))]
         # collect dimension labels
         tp_freq = 0
         fp_freq = 0
@@ -1074,12 +1144,13 @@ class LabelModel(object):
         fn_freq = 0
         for fk in file_keys:
             cr = CustomisedRecoginiser(join(ann_dir, '%s.json' % fk), cm)
+            fk = fk.replace('se_ann_', '')
             if full_text_dir is not None:
                 cr.full_text_folder = full_text_dir
             if eHostGD:
-                if not isfile(join(gold_dir, '%s.knowtator.xml' % fk)):
+                if not isfile(join(gold_dir, '%s.txt.knowtator.xml' % fk)):
                     continue
-                gd = eHostDoc(join(gold_dir, '%s.knowtator.xml' % fk))
+                gd = eHostDoc(join(gold_dir, '%s.txt.knowtator.xml' % fk))
             else:
                 if not isfile(join(gold_dir, '%s-ann.xml' % fk)):
                     continue
@@ -1087,6 +1158,11 @@ class LabelModel(object):
             t = self.label.replace('neg_', '')
             anns = cr.get_anns_by_label(t)
             neg_anns = cr.get_anns_by_label('neg_' + t)
+
+            # re-segement sentences
+            cr.re_segment_sentences(fk)
+            # cr.relocate_all_anns(fk)
+            # gd.relocate_anns(cr.get_full_text(fk))
 
             not_matched_gds = []
             for e in gd.get_ess_entities():
@@ -1096,10 +1172,10 @@ class LabelModel(object):
             for a in anns + neg_anns:
                 # self.add_context_dimension_by_annotation(a)
                 self.add_label_dimension_by_annotation(a)
-                if (not ignore_context) and ((a.negation != 'Negated' and self.label.startswith('neg_')) or \
-                        (a.negation == 'Negated' and not self.label.startswith('neg_'))):
-                    logging.info('skipped because context')
-                    continue
+                # if (not ignore_context) and ((a.negation != 'Negated' and self.label.startswith('neg_')) or \
+                #         (a.negation == 'Negated' and not self.label.startswith('neg_'))):
+                #     logging.info('skipped because context')
+                #     continue
 
                 matched = False
                 for g in gd.get_ess_entities():
@@ -1114,7 +1190,8 @@ class LabelModel(object):
                     fp_freq += 1
 
                 sanns = cr.get_prior_anns(a, contenxt_depth=-3)
-                context_anns = [] + sanns['umls'] + sanns['phenotype'] + cr.get_context_words(a, fk)
+                # context_anns = [] + sanns['umls'] + sanns['phenotype'] + cr.get_context_words(a, fk)
+                context_anns =  cr.get_context_words(a, fk)
                 #collect cui labels
                 for u in sanns['umls']:
                     self._cui2label[u.cui] = u.pref
@@ -1189,7 +1266,7 @@ class LabelModel(object):
             logging.info('doing learning without considering contextual info')
         # print self.get_top_tfidf_dimensions(self.max_dimensions)
         cm = Concept2Mapping(_concept_mapping)
-        file_keys = [f.split('.')[0] for f in listdir(ann_dir) if isfile(join(ann_dir, f))]
+        file_keys = [f[:f.rfind('.')] for f in listdir(ann_dir) if isfile(join(ann_dir, f))]
         lbl2data = {}
         false_negatives = 0
         lbl2tps = {}
@@ -1197,16 +1274,24 @@ class LabelModel(object):
         query_label_perform = {}
         for fk in file_keys:
             cr = CustomisedRecoginiser(join(ann_dir, '%s.json' % fk), cm)
+            fk = fk.replace('se_ann_', '')
             if ful_text_dir is not None:
                 cr.full_text_folder = ful_text_dir
             if eHostGD:
-                if not isfile(join(gold_dir, '%s.knowtator.xml' % fk)):
+                if not isfile(join(gold_dir, '%s.txt.knowtator.xml' % fk)):
                     continue
-                gd = eHostDoc(join(gold_dir, '%s.knowtator.xml' % fk))
+                logging.debug('using GD file %s' % join(gold_dir, '%s.txt.knowtator.xml' % fk))
+                gd = eHostDoc(join(gold_dir, '%s.txt.knowtator.xml' % fk))
             else:
                 if not isfile(join(gold_dir, '%s-ann.xml' % fk)):
                     continue
+                logging.debug('using GD file %s' % join(gold_dir, '%s-ann.xml' % fk))
                 gd = EDIRDoc(join(gold_dir, '%s-ann.xml' % fk))
+
+            # re-segement sentences
+            cr.re_segment_sentences(fk)
+            # cr.relocate_all_anns(fk)
+            # gd.relocate_anns(cr.get_full_text(fk))
 
             not_matched_gds = []
             for e in gd.get_ess_entities():
@@ -1216,12 +1301,14 @@ class LabelModel(object):
 
             anns = cr.get_anns_by_label(self.label, ignore_mappings=ignore_mappings, no_context=ignore_context)
             for a in anns:
+                logging.debug('%s, %s, %s' % (a.str, a.start, a.end))
                 multiple_true_positives = 0
                 t2anns = cr.get_prior_anns(a)
                 # if len(t2anns['umls']) + len(t2anns['phenotype']) == 0:
                 #     t2anns = cr.get_prior_anns(a, contenxt_depth=-2)
-                context_anns = [] + t2anns['umls'] + t2anns['phenotype'] + \
-                               cr.get_context_words(a, fk)
+                # context_anns = [] + t2anns['umls'] + t2anns['phenotype'] + \
+                #                cr.get_context_words(a, fk)
+                context_anns = cr.get_context_words(a, fk)
                 matched = False
                 for g in gd.get_ess_entities():
                     if g.id in not_matched_gds:
@@ -1296,18 +1383,23 @@ class LabelModel(object):
             logging.info('doing learning without considering contextual info')
 
         cm = Concept2Mapping(concept_mapping_file)
-        file_keys = [f.split('.')[0] for f in listdir(ann_dir) if isfile(join(ann_dir, f))]
+        file_keys = [f[:f.rfind('.')] for f in listdir(ann_dir) if isfile(join(ann_dir, f))]
         lbl2data = {}
         for fk in file_keys:
             cr = CustomisedRecoginiser(join(ann_dir, '%s.json' % fk), cm)
             if full_text_dir is not None:
                 cr.full_text_folder = full_text_dir
 
+            # re-segement sentences
+            cr.re_segment_sentences(fk)
+            # cr.relocate_all_anns(fk)
+
             anns = cr.get_anns_by_label(self.label, ignore_mappings=ignore_mappings, no_context=ignore_context)
             for a in anns:
                 t2anns = cr.get_prior_anns(a)
-                context_anns = [] + t2anns['umls'] + t2anns['phenotype'] + \
-                               cr.get_context_words(a, fk)
+                # context_anns = [] + t2anns['umls'] + t2anns['phenotype'] + \
+                #                cr.get_context_words(a, fk)
+                context_anns = cr.get_context_words(a, fk)
                 if separate_by_label:
                     lbl = LabelModel.get_ann_query_label(a)
                 else:
@@ -1353,7 +1445,7 @@ class LabelModel(object):
 
     @staticmethod
     def get_ann_dim_label(ann, generalise=False, no_negation=False):
-        if isinstance(ann, basestring):
+        if isinstance(ann, str):
             return 'WORD_%s' % ann
         negated = ''
         label = ann.str
@@ -1464,7 +1556,7 @@ class LabelModel(object):
     def cluster(X, Y, output_file=None):
         dbm = DBSCAN(eps=.50).fit(X)
         cls2label = {}
-        for idx in xrange(len(dbm.labels_)):
+        for idx in range(len(dbm.labels_)):
             c = dbm.labels_[idx]
             cls = 'cls%s' % c
             if cls not in cls2label:
@@ -1500,7 +1592,7 @@ class LabelModel(object):
             P = numpy.ones(len(X))
         else:
             logging.info('instance size %s' % len(P))
-        for idx in xrange(len(P)):
+        for idx in range(len(P)):
             if P[idx] == Y[idx]:
                 if P[idx] == 1.0:
                     performance.increase_true_positive()
@@ -1544,7 +1636,7 @@ class LabelModel(object):
 
     @staticmethod
     def collect_prediction(P, doc_anns, doc2predicted):
-        for idx in xrange(len(P)):
+        for idx in range(len(P)):
             if P[idx] == 1.0 and doc_anns is not None:
                 d = doc_anns[idx]['d']
                 labeled_ann = {'label': doc_anns[idx]['label'],
@@ -1558,7 +1650,7 @@ class LabelModel(object):
     def cal_performance(P, Y, performance, separate_performance=None,
                         id2conll=None, doc_anns=None, file_pattern=None, doc_folder=None, label_whitelist=None):
         doc2predicted = {}
-        for idx in xrange(len(P)):
+        for idx in range(len(P)):
             if P[idx] == Y[idx]:
                 if P[idx] == 1.0:
                     performance.increase_true_positive()
@@ -1692,7 +1784,7 @@ class BinaryClusterClassifier(object):
     def do_clustering(X, class_prefix='cls:'):
         dbm = DBSCAN(eps=1.0).fit(X)
         cls2insts = {}
-        for idx in xrange(len(dbm.labels_)):
+        for idx in range(len(dbm.labels_)):
             c = dbm.labels_[idx]
             cls = '%s%s' % (class_prefix, c)
             if cls not in cls2insts:
@@ -1832,7 +1924,7 @@ def get_doc_level_inference(label_dir, ann_dir, file_key, type2insts, type2inst_
     logging.info('working on %s' % join(label_dir, label_file))
     ed = EDIRDoc(join(label_dir, label_file))
     if not isfile(join(label_dir, label_file)):
-        print 'not a file: %s' % join(label_dir, label_file)
+        print( 'not a file: %s' % join(label_dir, label_file))
         return
     sd = SemEHRAnnDoc(join(ann_dir, ann_file))
     sd.learn_mappings_from_labelled(ed, type2insts, t2missed)
@@ -1882,7 +1974,7 @@ def learn_prediction_model(label, ann_dir=None, gold_dir=None, model_file=None, 
                            max_dimension=None,
                            ignore_mappings=[],
                            viz_file=None, ignore_context=False, separate_by_label=False, full_text_dir=None,
-                           eHOSTGD=False):
+                           eHostGD=False):
     model_changed = False
     if model_file is not None:
         lm = LabelModel.deserialise(model_file)
@@ -1890,7 +1982,7 @@ def learn_prediction_model(label, ann_dir=None, gold_dir=None, model_file=None, 
         model_changed = True
         lm = LabelModel(label)
         lm.collect_tfidf_dimensions(ann_dir=ann_dir, gold_dir=gold_dir, ignore_context=ignore_context,
-                                    separate_by_label=separate_by_label, full_text_dir=full_text_dir, eHOSTGD=eHOSTGD)
+                                    separate_by_label=separate_by_label, full_text_dir=full_text_dir, eHostGD=eHostGD)
     lm.use_one_dimension_for_label = False
     lm.max_dimensions = max_dimension
     if ann_dir is not None:
@@ -1898,7 +1990,7 @@ def learn_prediction_model(label, ann_dir=None, gold_dir=None, model_file=None, 
         # logging.info(bad_lables)
         bad_lables = []
         data = lm.load_data(ann_dir, gold_dir, ignore_mappings=bad_lables, ignore_context=ignore_context,
-                            separate_by_label=separate_by_label, ful_text_dir=full_text_dir, eHOSTGD=eHOSTGD)
+                            separate_by_label=separate_by_label, ful_text_dir=full_text_dir, eHostGD=eHostGD)
         # if separate_by_label:
         for lbl in data['lbl2data']:
             X = data['lbl2data'][lbl]['X']
@@ -1907,12 +1999,13 @@ def learn_prediction_model(label, ann_dir=None, gold_dir=None, model_file=None, 
             for y in Y:
                 if y == [1]:
                     n_true += 1
+            logging.debug('training data: %s, dimensions %s, insts %s' % (lbl, len(X[0]), len(X)))
             if len(X) <= _min_sample_size:
                 lm.add_rare_label(lbl, n_true * 1.0 / len(X))
                 continue
             # ignore_mappings += data['bad_labels']
-            lm.random_forest_learning(X, Y, output_file=ml_model_file_ptn % escape_lable_to_filename(lbl))
-            # lm.svm_learning(X, Y, output_file=ml_model_file_ptn % escape_lable_to_filename(lbl))
+            # lm.random_forest_learning(X, Y, output_file=ml_model_file_ptn % escape_lable_to_filename(lbl))
+            lm.svm_learning(X, Y, output_file=ml_model_file_ptn % escape_lable_to_filename(lbl))
             # lm.gaussian_nb(X, Y, output_file=ml_model_file_ptn % escape_lable_to_filename(lbl))
             logging.debug('%s, #insts: %s, #tps: %s' % (lbl, len(X), n_true))
             # if len(Y) > 20 and (.1< n_true * 1.0 / len(Y) < .9):
@@ -1955,14 +2048,16 @@ def predict_label(model_file, test_ann_dir, test_gold_dir, ml_model_file_ptn, pe
                   full_text_dir=None,
                   file_pattern='%s-ann.xml',
                   id2conll=None,
-                  label_whitelist=None):
+                  label_whitelist=None,
+                  eHostGD=False):
     lm = LabelModel.deserialise(model_file)
     lm.max_dimensions = max_dimension
     data = lm.load_data(test_ann_dir, test_gold_dir, ignore_mappings=ignore_mappings, ignore_context=ignore_context,
-                        separate_by_label=separate_by_label, verbose=False, ful_text_dir=full_text_dir)
+                        separate_by_label=separate_by_label, verbose=False, ful_text_dir=full_text_dir, eHostGD=eHostGD)
 
     files = data['files']
     for d in files:
+        d = d.replace('se_ann_', '')
         if d not in id2conll:
             id2conll[d] = ConllDoc(join(test_gold_dir, file_pattern % d))
             if label_whitelist is not None:
@@ -1983,14 +2078,14 @@ def predict_label(model_file, test_ann_dir, test_gold_dir, ml_model_file_ptn, pe
                                                 label_whitelist=label_whitelist)
         else:
             if len(X) > 0:
-                logging.debug('%s, dimensions %s' % (lbl, len(X[0])))
+                logging.debug('predict data: %s, dimensions %s, insts %s' % (lbl, len(X[0]), len(X)))
             bc = lm.get_binary_cluster_classifier(lbl)
             if bc is not None:
                 complementary_classifiers = []
                 for l in lm.cluster_classifier_dict:
                     if l != lbl:
                         complementary_classifiers.append(lm.cluster_classifier_dict[l])
-                for idx in xrange(len(X)):
+                for idx in range(len(X)):
                     logging.debug('%s => %s' % (bc.classify(X[idx], complementary_classifiers=complementary_classifiers), Y[idx]))
             lm.predict_use_model(X, Y, 0, mtp, ml_model_file_ptn % escape_lable_to_filename(lbl), performance,
                                  pca_model_file=pca_model_file,
@@ -2012,7 +2107,7 @@ def populate_semehr_results(label_dir, ann_dir, file_key,
                             label2performances, using_combined=False):
     label_file = '%s-ann.xml' % file_key
     ann_file = '%s.json' % file_key
-    print join(label_dir, label_file)
+    print(join(label_dir, label_file))
     if not isfile(join(label_dir, label_file)):
         return
 
@@ -2036,7 +2131,8 @@ def populate_validation_results():
     CustomisedRecoginiser.print_performances(label2performances)
 
 
-def do_learn_exp(viz_file, num_dimensions=[20], ignore_context=False, separate_by_label=False, conll_output_file=None):
+def do_learn_exp(viz_file, num_dimensions=[20], ignore_context=False, separate_by_label=False, conll_output_file=None,
+                 eHostGD=False):
     results = {}
     id2conll = {}
     for lbl in _labels:
@@ -2067,7 +2163,8 @@ def do_learn_exp(viz_file, num_dimensions=[20], ignore_context=False, separate_b
                                    viz_file=viz_file,
                                    ignore_context=ignore_context,
                                    separate_by_label=separate_by_label,
-                                   full_text_dir=_gold_text_dir)
+                                   full_text_dir=_gold_text_dir,
+                                   eHostGD=eHostGD)
             logging.debug('bad labels: %s' % ignore_mappings)
             pl = '%s dim[%s]' % (lbl, dim)
             performance = LabelPerformance(pl)
@@ -2083,20 +2180,22 @@ def do_learn_exp(viz_file, num_dimensions=[20], ignore_context=False, separate_b
                           ignore_context=ignore_context,
                           separate_by_label=separate_by_label,
                           full_text_dir=_test_text_dir,
+                          file_pattern=_gold_file_pattern,
                           id2conll=id2conll,
-                          label_whitelist=_labels)
+                          label_whitelist=_labels,
+                          eHostGD=eHostGD)
         CustomisedRecoginiser.print_performances(results)
-    conll_output = ''
-    for id in id2conll:
-        doc_output = id2conll[id].conll_output
-        conll_output += doc_output + '\n'
-        logging.info('doc [%s]' % id)
-        logging.info(doc_output)
-
-    logging.info('total processed %s docs' % len(id2conll))
-    if conll_output_file is not None:
-        utils.save_string(conll_output, conll_output_file)
-        logging.info('conll_output saved to [%s]' % conll_output_file)
+    # conll_output = ''
+    # for id in id2conll:
+    #     doc_output = id2conll[id].conll_output
+    #     conll_output += doc_output + '\n'
+    #     logging.info('doc [%s]' % id)
+    #     logging.info(doc_output)
+    #
+    # logging.info('total processed %s docs' % len(id2conll))
+    # if conll_output_file is not None:
+    #     utils.save_string(conll_output, conll_output_file)
+    #     logging.info('conll_output saved to [%s]' % conll_output_file)
 
 
 def save_text_files(xml_dir, text_dr):
@@ -2132,13 +2231,34 @@ def merge_mappings_dictionary(map_files, dict_dirs, new_map_file, new_dict_folde
     logging.info('all done')
 
 
+def relocate_annotation_pos(t, s, e, string_orig):
+    if t[s:e] == string_orig:
+        return [s, e]
+    candidates = []
+    ito = re.finditer(r'[\s\.;\,\?\!\:\/$^](' + string_orig + r')[\s\.;\,\?\!\:\/$^]',
+                t, re.IGNORECASE)
+    for mo in ito:
+        # print mo.start(1), mo.end(1), mo.group(1)
+        candidates.append({'dis': abs(s - mo.start(1)), 's': mo.start(1), 'e': mo.end(1), 'matched': mo.group(1)})
+    if len(candidates) == 0:
+        return [s, e]
+    candidates.sort(cmp=lambda x1, x2: x1['dis'] - x2['dis'])
+    # print candidates[0]
+    return [candidates[0]['s'], candidates[0]['e']]
+
+
 def test_eHost_doc():
     d = eHostDoc('/Users/honghan.wu/Desktop/ehost_sample.xml')
-    print [(e.label, e.start, e.end, e.str) for e in d.get_ess_entities()]
+    print([(e.label, e.start, e.end, e.str) for e in d.get_ess_entities()])
+
 
 if __name__ == "__main__":
-    logging.basicConfig(level='INFO', format='[%(filename)s:%(lineno)d] %(name)s %(asctime)s %(message)s')
-    ss = StrokeSettings('./settings/ess_annotator1.json')
+    log_level = 'DEBUG'
+    log_format = '[%(filename)s:%(lineno)d] %(name)s %(asctime)s %(message)s'
+    logging.basicConfig(level='DEBUG', format=log_format)
+    log_file = './settings/processing.log'
+    logging.basicConfig(level=log_level, format=log_format)
+    ss = StrokeSettings('./settings/settings.json')
     settings = ss.settings
     _min_sample_size = settings['min_sample_size']
     _ann_dir = settings['ann_dir']
@@ -2150,6 +2270,7 @@ if __name__ == "__main__":
     _concept_mapping = settings['concept_mapping_file']
     _learning_model_dir = settings['learning_model_dir']
     _labels = utils.read_text_file(settings['entity_types_file'])
+    _gold_file_pattern = "_ann.xml" if 'gold_file_pattern' not in settings else settings['gold_file_pattern']
     _ignore_mappings = utils.load_json_data(settings['ignore_mapping_file'])
     _eHostGD = settings['eHostGD'] if 'eHostGD' in settings else False
     _cm_obj = Concept2Mapping(_concept_mapping)
@@ -2173,7 +2294,7 @@ if __name__ == "__main__":
     # learn_concept_mappings(settings['gazetteer_dir'])
     # 5. learn phenotype inference
     do_learn_exp(settings['viz_file'],
-                 num_dimensions=[30],
+                 num_dimensions=[100],
                  ignore_context=settings['ignore_context'] if 'ignore_context' in settings else False,
                  separate_by_label=True,
-                 conll_output_file=settings['conll_output_file'], _eHostGD=_eHostGD)
+                 conll_output_file=settings['conll_output_file'], eHostGD=_eHostGD)
