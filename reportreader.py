@@ -1,5 +1,5 @@
 import utils
-from nlp_to_phenome import SemEHRAnnDoc
+from nlp_to_phenome import SemEHRAnnDoc, BasicAnn
 import logging
 from os.path import basename, isfile, join, split
 from os import listdir, remove
@@ -14,6 +14,13 @@ def get_nlp_instance():
         _spacy_nlp = spacy.load("en_core_web_sm")
     return _spacy_nlp
 
+
+def get_sentences_as_anns(nlp, text):
+    doc = nlp(text)
+    anns = []
+    for s in doc.sents:
+        anns.append(BasicAnn(s.text, s.start_char, s.end_char))
+    return anns
 
 class AbstractedSentence(object):
     def __init__(self, seq):
@@ -57,6 +64,9 @@ class AbstractedSentence(object):
             return None
         self._parsed = nlp(self.text)
         return self._parsed
+
+    def locate_pos(self, str):
+        return self._text.find(str)
 
     def get_abstaction_by_pos(self, pos, nlp):
         doc = self.get_parsed_tree(nlp)
@@ -153,10 +163,20 @@ def test_abstract_sentence():
     abss.text = u"She said he might be getting better soon"
     result = abss.get_abstaction_by_pos(29, nlp)
     if result is not None:
-        print result.root, result.children, result.verbs, result.subject
+        print(result.root, result.children, result.verbs, result.subject)
+
+
+def test_sentences():
+    nlp = get_nlp_instance()
+    sents = get_sentences_as_anns(nlp, u"""
+Circumstances leading to assessment.
+Over the past week ZZZZZ.
+    """)
+    print([s.serialise_json() for s in sents])
 
 
 if __name__ == "__main__":
     logging.basicConfig(level='DEBUG', format='[%(filename)s:%(lineno)d] %(name)s %(asctime)s %(message)s')
-    test_spacy()
-    test_abstract_sentence()
+    # test_spacy()
+    # test_abstract_sentence()
+    test_sentences()
