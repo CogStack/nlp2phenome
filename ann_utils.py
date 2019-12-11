@@ -104,7 +104,7 @@ def get_what_is_changing(ann_folder, text_folder, output_file):
     for f in files:
         d = eHostAnnDoc(join(ann_folder, f))
         anns = d.get_ess_entities(no_context=True)
-        text = utils.read_text_file_as_string(join(text_folder, f[0:-14]))
+        text = utils.read_text_file_as_string(join(text_folder, f[0:-14]), encoding='cp1252')
         sents = rr.get_sentences_as_anns(nlp, text)
         for ann in anns:
             for s in sents:
@@ -112,6 +112,9 @@ def get_what_is_changing(ann_folder, text_folder, output_file):
                     abss = rr.AbstractedSentence(1)
                     abss.text = s.str
                     result = abss.get_abstaction_by_pos(abss.locate_pos(ann.str), nlp)
+                    if result is None:
+                        logging.info('%s not found in %s' % (ann.str, f))
+                        continue
                     type = ann.label
                     if type not in type2abstractions:
                         type2abstractions[type] = []
@@ -128,7 +131,11 @@ def compute_iaa():
 
 
 if __name__ == "__main__":
+    log_level = 'DEBUG'
+    log_format = '[%(filename)s:%(lineno)d] %(name)s %(asctime)s %(message)s'
+    logging.basicConfig(level='DEBUG', format=log_format)
     if len(sys.argv) != 4:
         print('the syntax is [python ann_utils.py ann_folder, text_folder, result_file]')
     else:
+        logging.info('working...')
         get_what_is_changing(sys.argv[1], sys.argv[2], sys.argv[3])

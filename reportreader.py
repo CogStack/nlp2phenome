@@ -122,7 +122,7 @@ class TokenAbstraction(object):
         self._root = r
 
     def to_dict(self):
-        return {'children': self.children, 'root': self.root, 'subject': self.subject, 'verbs': self.verbs}
+        return {'children': [t.text for t in self.children], 'root': self.root.text, 'subject': [s.text for s in self.subject], 'verbs': [v.text for v in self.verbs]}
 
 
 class ReportAbstractor(SemEHRAnnDoc):

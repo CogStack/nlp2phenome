@@ -115,7 +115,7 @@ def multi_thread_do(thread_obj, q, func, *args):
 
 def save_json_array(lst, file_path, encoding='utf-8'):
     with codecs.open(file_path, 'w', encoding=encoding) as wf:
-        json.dump(lst, wf, encoding=encoding)
+        json.dump(lst, wf)
 
 
 def save_string(str, file_path, encoding='utf-8'):
