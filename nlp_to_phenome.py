@@ -141,7 +141,7 @@ class eHostDoc(EDIRDoc):
             mention_id = e.attrib['id']
             if len(mcs) > 0:
                 mc = mcs[0]
-                m = re.match(r'Verified\_([^\(]+)\(.*\)', mc.attrib['id'])
+                m = re.match(r'Verified\_([^\(]+)(\(.*\)){0,1}', mc.attrib['id'])
                 if m is not None:
                     cls = m.group(1)
                     mentions = root.findall('.//mention[@id="' + mention_id + '"]/..')

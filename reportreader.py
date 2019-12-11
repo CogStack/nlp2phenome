@@ -22,6 +22,7 @@ def get_sentences_as_anns(nlp, text):
         anns.append(BasicAnn(s.text, s.start_char, s.end_char))
     return anns
 
+
 class AbstractedSentence(object):
     def __init__(self, seq):
         self._seq = 0
@@ -119,6 +120,9 @@ class TokenAbstraction(object):
             self._verbs = [v for v in t.children if v.pos_ == u"VERB"]
             self._subject = [s for s in t.children if s.dep_ == u"nsubj"]
         self._root = r
+
+    def to_dict(self):
+        return {'children': self.children, 'root': self.root, 'subject': self.subject, 'verbs': self.verbs}
 
 
 class ReportAbstractor(SemEHRAnnDoc):
