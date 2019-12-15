@@ -7,6 +7,7 @@ import re
 import utils
 import logging
 import sys
+from operator import itemgetter
 
 
 class eHostAnnDoc(EDIRDoc):
@@ -130,10 +131,43 @@ def compute_iaa():
     ehost_iaa_compute(folder_lia, folder_rob, no_context=True)
 
 
+def analyse_trajectory_subjects(file):
+    t2subs = utils.load_json_data(file)
+    t2freq = {}
+    for t in t2subs:
+        if t not in t2freq:
+            t2freq[t] = {'subject': {}, 'root': {}}
+        for sub in t2subs[t]:
+            add_key_freq(t2freq[t]['subject'], ','.join(sub['subject']))
+            add_key_freq(t2freq[t]['root'], sub['root'])
+
+    s = ''
+    for t in t2freq:
+        freqs = t2freq[t]
+        subs = sorted([(k, freqs['subject'][k]) for k in freqs['subject']], key=itemgetter(1), reverse=True)
+        s += '***%s [subjects]***\n%s\n\n' % (t, freq_to_str(subs))
+        roots = sorted([(k, freqs['root'][k]) for k in freqs['root']], key=itemgetter(1), reverse=True)
+        s += '***%s [roots]***\n%s\n\n' % (t, freq_to_str(roots))
+    logging.info(s)
+
+
+def freq_to_str(freq):
+    return '\n'.join(['%s\t%s' % (t[0], t[1]) for t in freq])
+
+
+def add_key_freq(d, key):
+    if key in d:
+        d[key] += 1
+    else:
+        d[key] = 1
+
+
 if __name__ == "__main__":
     log_level = 'DEBUG'
     log_format = '[%(filename)s:%(lineno)d] %(name)s %(asctime)s %(message)s'
     logging.basicConfig(level='DEBUG', format=log_format)
+    # sub_json_file = '...train-trajectory-subjects.json'
+    # analyse_trajectory_subjects(sub_json_file)
     if len(sys.argv) != 4:
         print('the syntax is [python ann_utils.py ann_folder, text_folder, result_file]')
     else:
