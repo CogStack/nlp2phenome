@@ -33,6 +33,7 @@ class EDIRDoc(object):
     """
     a class for reading EDIR annotation doc (XML)
     """
+
     def __init__(self, file_path):
         self._path = file_path
         self._root = None
@@ -64,7 +65,7 @@ class EDIRDoc(object):
         start_offset = -1
         for p in root.findall('.//p'):
             for s in p:
-                if 'proc' in s.attrib: # and s.attrib['proc'] == 'yes':
+                if 'proc' in s.attrib:  # and s.attrib['proc'] == 'yes':
                     for w in s:
                         id_val = int(w.attrib['id'][1:])
                         if start_offset == -1:
@@ -127,6 +128,44 @@ class EDIRDoc(object):
             a.end = e
 
 
+class eHostGenedDoc(EDIRDoc):
+    def __init__(self, file_path):
+        super(eHostGenedDoc, self).__init__(file_path)
+
+    def get_ess_entities(self):
+        if self._entities is not None:
+            return self._entities
+        root = self._root
+        entities = []
+        s_e_ids = []
+        for e in root.findall('.//classMention'):
+            mcs = e.findall('./mentionClass')
+            mention_id = e.attrib['id']
+            if len(mcs) > 0:
+                mc = mcs[0]
+                cls = mc.attrib['id']
+                cls = cls.replace('Negated_', '').replace('hypothetical_', '').replace('Other_', '').replace(
+                    'historical_', '')
+                mentions = root.findall('.//mention[@id="' + mention_id + '"]/..')
+                if len(mentions) > 0:
+                    span = mentions[0].findall('./span')
+                    ent_start = span[0].attrib['start']
+                    ent_end = span[0].attrib['end']
+
+                    s_e_id = '%s-%s' % (ent_start, ent_end)
+                    if s_e_id in s_e_ids:
+                        continue
+                    s_e_ids.append(s_e_id)
+
+                    spannedText = mentions[0].findall('./spannedText')
+                    str = spannedText[0].text
+                    ann = EDIRAnn(str=str, start=int(ent_start), end=int(ent_end), type=cls)
+                    ann.id = len(entities)
+                    entities.append(ann)
+        self._entities = entities
+        return self._entities
+
+
 class eHostDoc(EDIRDoc):
     def __init__(self, file_path):
         super(eHostDoc, self).__init__(file_path)
@@ -162,6 +201,7 @@ class ConllDoc(EDIRDoc):
     """
     for Conll output from classification results
     """
+
     def __init__(self, file_path):
         super(ConllDoc, self).__init__(file_path)
         self._tokens = None
@@ -175,7 +215,7 @@ class ConllDoc(EDIRDoc):
         try:
             return '\n'.join([' '.join([t['t'], str(len(t['predicted_label'])), t['gold_label'],
                                         (('B-' if t['predicted_label'][-1]['ann'].start == t['offset'] else 'I-') +
-                                         t['predicted_label'][-1]['label'] )
+                                         t['predicted_label'][-1]['label'])
                                         if len(t['predicted_label']) > 0 else 'O'])
                               for t in self.get_token_list()])
         except:
@@ -192,7 +232,7 @@ class ConllDoc(EDIRDoc):
         matched_ess = set()
         for p in root.findall('.//p'):
             for s in p:
-                if 'proc' in s.attrib: # and s.attrib['proc'] == 'yes':
+                if 'proc' in s.attrib:  # and s.attrib['proc'] == 'yes':
                     for w in s:
                         id_val = int(w.attrib['id'][1:])
                         if start_offset == -1:
@@ -235,6 +275,7 @@ class BasicAnn(object):
     """
     a simple NLP (Named Entity) annotation class
     """
+
     def __init__(self, str, start, end):
         self._str = str
         self._start = start
@@ -298,6 +339,7 @@ class EDIRAnn(BasicAnn):
     """
     EDIR annotation class
     """
+
     def __init__(self, str, start, end, type):
         self._type = type
         super(EDIRAnn, self).__init__(str, start, end)
@@ -331,6 +373,7 @@ class ContextedAnn(BasicAnn):
     """
     a contextulised annotation class (negation/tempolarity/experiencer)
     """
+
     def __init__(self, str, start, end, negation, temporality, experiencer):
         self._neg = negation
         self._temp = temporality
@@ -366,6 +409,7 @@ class PhenotypeAnn(ContextedAnn):
     """
     a simple customisable phenotype annotation (two attributes for customised attributes)
     """
+
     def __init__(self, str, start, end,
                  negation, temporality, experiencer,
                  major_type, minor_type):
@@ -419,6 +463,7 @@ class SemEHRAnn(ContextedAnn):
     """
     SemEHR Annotation Class
     """
+
     def __init__(self, str, start, end,
                  negation, temporality, experiencer,
                  cui, sty, pref, ann_type):
@@ -476,6 +521,7 @@ class SemEHRAnnDoc(object):
     """
     SemEHR annotation Doc
     """
+
     def __init__(self, file_path):
         self._doc = utils.load_json_data(file_path)
         self._anns = []
@@ -591,6 +637,7 @@ class Concept2Mapping(object):
     """
     a mapping from annotations to phenotypes
     """
+
     def __init__(self, concept_map_file):
         self._concept_map_file = concept_map_file
         self._cui2label = {}
@@ -604,9 +651,9 @@ class Concept2Mapping(object):
         concept_mapping = utils.load_json_data(self._concept_map_file)
         concept2types = {}
         for t in concept_mapping:
-            self._type2concept[t] =[]
+            self._type2concept[t] = []
             for text in concept_mapping[t]:
-                c = text[:8] # only to get the CUI
+                c = text[:8]  # only to get the CUI
                 self._type2concept[t].append(c)
                 arr = text.split('\t')
                 self._cui2label[c] = arr[1]
@@ -653,6 +700,7 @@ class CustomisedRecoginiser(SemEHRAnnDoc):
     recognise target labels based on identified UMLS entities and
     customised labels
     """
+
     def __init__(self, file_path, concept_mapping):
         super(CustomisedRecoginiser, self).__init__(file_path=file_path)
         self._concept_mapping = concept_mapping
@@ -765,7 +813,7 @@ class CustomisedRecoginiser(SemEHRAnnDoc):
     def get_containing_anns(self, ann):
         c_anns = []
         for a in self.phenotypes:
-            if ann!=a and ann.str.lower() in a.str.lower() and len(a.str) > len(ann.str):
+            if ann != a and ann.str.lower() in a.str.lower() and len(a.str) > len(ann.str):
                 c_anns.append(a)
         return c_anns
 
@@ -788,46 +836,46 @@ class CustomisedRecoginiser(SemEHRAnnDoc):
         if text is not None:
             self.sentences = rr.get_sentences_as_anns(rr.get_nlp_instance(), text)
 
-    def get_context_words(self, ann, file_key, n_words=1):
+    def get_context_words(self, ann, file_key, n_words=2):
         sent = self.get_ann_sentence(ann)
         t = self.get_full_text(file_key)
         words = []
         if t is not None:
             s = t[sent.start:sent.end]
-            # context_start = ann.start - sent.start + len(ann.str)
-            # str = s[context_start:]
-            # p = re.compile(r'\b(\w+)\b')
-            # idx = 0
-            # for m in p.finditer(str):
-            #     if idx <= n_words - 1:
-            #         words.append(str[m.span(1)[0]:m.span(1)[1]])
-            #     else:
-            #         break
-            #     idx += 1
+            context_start = ann.start - sent.start + len(ann.str)
+            str = s[context_start:]
+            p = re.compile(r'\[A-Za-z]{0,2}\b(\w+)\b')
+            idx = 0
+            for m in p.finditer(str):
+                if idx <= n_words - 1:
+                    words.append(str[m.span(1)[0]:m.span(1)[1]])
+                else:
+                    break
+                idx += 1
 
             # use dependency tree to get context words
-            abss = rr.AbstractedSentence(1)
-            abss.text = s
-            result = abss.get_abstaction_by_pos(abss.locate_pos(ann.str), rr.get_nlp_instance())
-            dep_words = []
-            if result is not None:
-                # subject
-                dep_words.append(result.subject[0].text if len(result.subject) > 0 else 'empty')
+            # abss = rr.AbstractedSentence(1)
+            # abss.text = s
+            # result = abss.get_abstaction_by_pos(abss.locate_pos(ann.str), rr.get_nlp_instance())
+            # dep_words = []
+            # if result is not None:
+            #     # subject
+            #     dep_words.append(result.subject[0].text if len(result.subject) > 0 else 'empty')
 
-                # first verb other than root verb
-                dep_words.append(result.verbs[0].text if len(result.verbs) > 0 else 'empty')
+            #     # first verb other than root verb
+            #     dep_words.append(result.verbs[0].text if len(result.verbs) > 0 else 'empty')
 
-                # root verb
-                dep_words.append(result.root.text if result.root is not None else 'empty')
+            #     # root verb
+            #     dep_words.append(result.root.text if result.root is not None else 'empty')
 
-                # first child
-                dep_words.append(result.children[0].text if len(result.children) > 0 else 'empty')
-            else:
-                dep_words += ['empty'] *4
-                logging.debug('not found [%s]' % s)
-            words += dep_words
+            #     # first child
+            #     dep_words.append(result.children[0].text if len(result.children) > 0 else 'empty')
+            # else:
+            #     dep_words += ['empty'] *4
+            #     logging.debug('not found [%s]' % s)
+            # words += dep_words
         if len(words) == 0:
-            words =['empty']
+            words = ['empty']
         return words
 
     def get_anns_by_label(self, label, ignore_mappings=[], no_context=False):
@@ -845,7 +893,7 @@ class CustomisedRecoginiser(SemEHRAnnDoc):
                     anns.append(a)
                 elif not label.startswith('neg_') and a.negation != 'Negated':
                     anns.append(a)
-        anns = []
+        # anns = []
         phenotypes = []
         smaller_to_remove = []
         for a in self.phenotypes:
@@ -930,6 +978,7 @@ class CustomisedRecoginiser(SemEHRAnnDoc):
                                                        p.true_positive + p.false_negative,
                                                        p.false_positive, p.false_negative, p.true_positive)
         logging.getLogger('performance').info(s)
+        return s
 
 
 class LabelModel(object):
@@ -939,6 +988,7 @@ class LabelModel(object):
     - feature weighing
     - transparent models
     """
+
     def __init__(self, label, max_dimensions=None):
         self._label = label
         self._lbl_data = {}
@@ -1018,7 +1068,8 @@ class LabelModel(object):
             fps.add(value.lower())
 
     def add_context_dimension_by_annotation(self, ann, tp=None, fp=None, lbl=None):
-        self.add_context_dimension(LabelModel.get_ann_dim_label(ann, generalise=True, no_negation=True), tp=tp, fp=fp, lbl=lbl)
+        self.add_context_dimension(LabelModel.get_ann_dim_label(ann, generalise=True, no_negation=True), tp=tp, fp=fp,
+                                   lbl=lbl)
 
     def get_top_freq_dimensions(self, k, lbl='united'):
         if self._selected_dims is not None:
@@ -1047,7 +1098,7 @@ class LabelModel(object):
         df = []
         max_score = 0
         for l in d['t2f']:
-            idf = 1.0 / ( (1 if l in d['tps'] else 0) + (1 if l in d['fps'] else 0) )
+            idf = 1.0 / ((1 if l in d['tps'] else 0) + (1 if l in d['fps'] else 0))
             score = 1.0 * d['t2f'][l] / (len(tps) + len(fps))
             if idf_weight == 1 or (l in d['tps'] and l in d['fps']):
                 score = score * idf
@@ -1059,7 +1110,7 @@ class LabelModel(object):
             df.append((l, score))
         df = sorted(df, key=lambda x: -x[1])
         # logging.debug(df)
-        self._lbl2tfidf_dims[lbl] = [(t[0], t[1] * 1.0 / max_score ) for t in df[:k]]
+        self._lbl2tfidf_dims[lbl] = [(t[0], t[1] * 1.0 / max_score) for t in df[:k]]
         logging.debug('%s ==> [%s]' % (lbl, self._lbl2tfidf_dims[lbl]))
         return self._lbl2tfidf_dims[lbl]
 
@@ -1098,7 +1149,7 @@ class LabelModel(object):
         #         else:
         #             encoded.append(0)
         context_labels = [LabelModel.get_ann_dim_label(ann, generalise=True, no_negation=True) for ann in context_anns]
-        for l, score in self.get_top_tfidf_dimensions(self.max_dimensions, lbl=lbl): # self.context_dimensions:
+        for l, score in self.get_top_tfidf_dimensions(self.max_dimensions, lbl=lbl):  # self.context_dimensions:
             # freq = 0
             # for cl in context_labels:
             #     if cl.lower() == l.lower():
@@ -1127,7 +1178,7 @@ class LabelModel(object):
                     continue
                 sanns = cr.get_same_sentence_anns(a)
                 context_anns = [] + sanns['umls'] + sanns['phenotype']
-                #collect cui labels
+                # collect cui labels
                 for u in sanns['umls']:
                     self._cui2label[u.cui] = u.pref
                 for c in context_anns:
@@ -1150,7 +1201,7 @@ class LabelModel(object):
             if eHostGD:
                 if not isfile(join(gold_dir, '%s.txt.knowtator.xml' % fk)):
                     continue
-                gd = eHostDoc(join(gold_dir, '%s.txt.knowtator.xml' % fk))
+                gd = eHostGenedDoc(join(gold_dir, '%s.txt.knowtator.xml' % fk))
             else:
                 if not isfile(join(gold_dir, '%s-ann.xml' % fk)):
                     continue
@@ -1160,7 +1211,7 @@ class LabelModel(object):
             neg_anns = cr.get_anns_by_label('neg_' + t)
 
             # re-segement sentences
-            cr.re_segment_sentences(fk)
+            # cr.re_segment_sentences(fk)
             # cr.relocate_all_anns(fk)
             # gd.relocate_anns(cr.get_full_text(fk))
 
@@ -1189,10 +1240,10 @@ class LabelModel(object):
                 if not matched:
                     fp_freq += 1
 
-                sanns = cr.get_prior_anns(a, contenxt_depth=-3)
-                # context_anns = [] + sanns['umls'] + sanns['phenotype'] + cr.get_context_words(a, fk)
-                context_anns =  cr.get_context_words(a, fk)
-                #collect cui labels
+                sanns = cr.get_prior_anns(a, contenxt_depth=-1)
+                context_anns = [] + sanns['umls'] + sanns['phenotype'] + cr.get_context_words(a, fk)
+                # context_anns =  cr.get_context_words(a, fk)
+                # collect cui labels
                 for u in sanns['umls']:
                     self._cui2label[u.cui] = u.pref
                 for c in context_anns:
@@ -1228,7 +1279,6 @@ class LabelModel(object):
                 if (ignore_context and e.label.replace('neg_', '') == label_type) \
                         or (not ignore_context and e.label == self.label):
                     not_matched_gds.append(e.id)
-
             anns = cr.get_anns_by_label(self.label, no_context=ignore_context)
             for a in anns:
                 multiple_true_positives = 0
@@ -1258,7 +1308,7 @@ class LabelModel(object):
                  1.0 * query_label_perform[l]['c'] / (query_label_perform[l]['c'] + query_label_perform[l]['w']),
                  query_label_perform[l]['c'],
                  query_label_perform[l]['w']) for l in query_label_perform]
-        return sorted(lbls, key=lambda x : x[1])
+        return sorted(lbls, key=lambda x: x[1])
 
     def load_data(self, ann_dir, gold_dir, verbose=True, ignore_mappings=[], ignore_context=False,
                   separate_by_label=False, ful_text_dir=None, eHostGD=False):
@@ -1280,8 +1330,8 @@ class LabelModel(object):
             if eHostGD:
                 if not isfile(join(gold_dir, '%s.txt.knowtator.xml' % fk)):
                     continue
-                logging.debug('using GD file %s' % join(gold_dir, '%s.txt.knowtator.xml' % fk))
-                gd = eHostDoc(join(gold_dir, '%s.txt.knowtator.xml' % fk))
+                # logging.debug('using GD file %s' % join(gold_dir, '%s.txt.knowtator.xml' % fk))
+                gd = eHostGenedDoc(join(gold_dir, '%s.txt.knowtator.xml' % fk))
             else:
                 if not isfile(join(gold_dir, '%s-ann.xml' % fk)):
                     continue
@@ -1289,7 +1339,7 @@ class LabelModel(object):
                 gd = EDIRDoc(join(gold_dir, '%s-ann.xml' % fk))
 
             # re-segement sentences
-            cr.re_segment_sentences(fk)
+            # cr.re_segment_sentences(fk)
             # cr.relocate_all_anns(fk)
             # gd.relocate_anns(cr.get_full_text(fk))
 
@@ -1306,9 +1356,9 @@ class LabelModel(object):
                 t2anns = cr.get_prior_anns(a)
                 # if len(t2anns['umls']) + len(t2anns['phenotype']) == 0:
                 #     t2anns = cr.get_prior_anns(a, contenxt_depth=-2)
-                # context_anns = [] + t2anns['umls'] + t2anns['phenotype'] + \
-                #                cr.get_context_words(a, fk)
-                context_anns = cr.get_context_words(a, fk)
+                context_anns = [] + t2anns['umls'] + t2anns['phenotype'] + \
+                               cr.get_context_words(a, fk)
+                # context_anns = cr.get_context_words(a, fk)
                 matched = False
                 for g in gd.get_ess_entities():
                     if g.id in not_matched_gds:
@@ -1322,13 +1372,14 @@ class LabelModel(object):
                 if verbose:
                     if not matched:
                         logging.debug('%s %s %s' % ('!',
-                                      self.get_ann_dim_label(a) +
-                                      ' // ' + ' | '.join(self.get_ann_dim_label(a, generalise=True)
-                                                          for a in context_anns), fk))
+                                                    self.get_ann_dim_label(a) +
+                                                    ' // ' + ' | '.join(self.get_ann_dim_label(a, generalise=True)
+                                                                        for a in context_anns), fk))
                     else:
                         logging.debug('%s %s %s' % ('R',
-                                                    self.get_ann_dim_label(a) + ' // ' + ' | '.join(self.get_ann_dim_label(a, generalise=True)
-                                                                  for a in context_anns), fk))
+                                                    self.get_ann_dim_label(a) + ' // ' + ' | '.join(
+                                                        self.get_ann_dim_label(a, generalise=True)
+                                                        for a in context_anns), fk))
                 if separate_by_label:
                     lbl = LabelModel.get_ann_query_label(a)
                 else:
@@ -1355,7 +1406,8 @@ class LabelModel(object):
             for g in gd.get_ess_entities():
                 if g.id in not_matched_gds:
                     missed = g
-                    logging.debug('\t'.join(['M',  g.str, str(g.negated), str(g.start), str(g.end), join(gold_dir, '%s-ann.xml' % fk)]))
+                    logging.debug('\t'.join(
+                        ['M', g.str, str(g.negated), str(g.start), str(g.end), join(gold_dir, '%s-ann.xml' % fk)]))
             # if len(not_matched_gds) > 0:
             #     print not_matched_gds
             #     for a in anns:
@@ -1387,19 +1439,20 @@ class LabelModel(object):
         lbl2data = {}
         for fk in file_keys:
             cr = CustomisedRecoginiser(join(ann_dir, '%s.json' % fk), cm)
+            fk = fk.replace('se_ann_', '')
             if full_text_dir is not None:
                 cr.full_text_folder = full_text_dir
 
             # re-segement sentences
-            cr.re_segment_sentences(fk)
+            # cr.re_segment_sentences(fk)
             # cr.relocate_all_anns(fk)
 
             anns = cr.get_anns_by_label(self.label, ignore_mappings=ignore_mappings, no_context=ignore_context)
             for a in anns:
                 t2anns = cr.get_prior_anns(a)
-                # context_anns = [] + t2anns['umls'] + t2anns['phenotype'] + \
-                #                cr.get_context_words(a, fk)
-                context_anns = cr.get_context_words(a, fk)
+                context_anns = [] + t2anns['umls'] + t2anns['phenotype'] + \
+                               cr.get_context_words(a, fk)
+                # context_anns = cr.get_context_words(a, fk)
                 if separate_by_label:
                     lbl = LabelModel.get_ann_query_label(a)
                 else:
@@ -1421,9 +1474,8 @@ class LabelModel(object):
             return not ann.cui.lower() in _cm_obj.all_entities
             # return not ann.cui in _cm_obj.type2cocnepts(type)
         else:
-            return not ann.str.lower() in  _cm_obj.all_entities
+            return not ann.str.lower() in _cm_obj.all_entities
             # return not ann.str in _cm_obj.type2gaz[type]
-
 
     @staticmethod
     def get_ann_query_label(ann):
@@ -1455,18 +1507,19 @@ class LabelModel(object):
             negated = ''
         # if hasattr(ann, 'cui'):
         #     label = ann.cui + ' ' + str(ann.pref)
-            # ann.str
+        # ann.str
         if hasattr(ann, 'minor_type'):
             label = ann.str
         # if generalise and hasattr(ann, 'sty'):
         #     label = ann.sty
-            # if ann.sty.lower() == 'body part, organ, or organ component':
+        # if ann.sty.lower() == 'body part, organ, or organ component':
         negated = ''
         return negated + label.lower()
         # return ann.str.lower() if not isinstance(ann, SemEHRAnn) else ann.cui.lower()
 
     @staticmethod
-    def decision_tree_learning(X, Y, lm, output_file=None, pca_dim=None, pca_file=None, tree_viz_file=None, lbl='united'):
+    def decision_tree_learning(X, Y, lm, output_file=None, pca_dim=None, pca_file=None, tree_viz_file=None,
+                               lbl='united'):
         if len(X) <= _min_sample_size:
             logging.warning('not enough data found for prediction: %s' % lm.label)
             if isfile(output_file):
@@ -1498,7 +1551,8 @@ class LabelModel(object):
             dot_data = tree.export_graphviz(clf, out_file=None,
                                             filled=True, rounded=True,
                                             feature_names=label_feature_names +
-                                                          [(str(lm.cui2label[l.upper()]) + '(' + l.upper() + ')') if l.upper() in lm.cui2label else l
+                                                          [(str(lm.cui2label[
+                                                                    l.upper()]) + '(' + l.upper() + ')') if l.upper() in lm.cui2label else l
                                                            for l in lm.context_dimensions(lbl)],
                                             class_names=['Yes', 'No'],
                                             special_characters=True)
@@ -1560,7 +1614,7 @@ class LabelModel(object):
             c = dbm.labels_[idx]
             cls = 'cls%s' % c
             if cls not in cls2label:
-                cls2label[cls] = {'t': 0,  'f':0}
+                cls2label[cls] = {'t': 0, 'f': 0}
             if Y[idx] == [0]:
                 cls2label[cls]['f'] += 1
             else:
@@ -1681,7 +1735,6 @@ class LabelModel(object):
             for anns in doc2predicted[d]:
                 cnll.add_predicted_labels(anns)
 
-
     @staticmethod
     def predict_use_model(X, Y, fns, multiple_tps, model_file, performance,
                           pca_model_file=None, separate_performance=None,
@@ -1705,7 +1758,7 @@ class LabelModel(object):
                 performance.increase_true_positive(multiple_tps)
                 if separate_performance is not None:
                     separate_performance.increase_true_positive(multiple_tps)
-        if all_true: # or len(X) <= _min_sample_size:
+        if all_true:  # or len(X) <= _min_sample_size:
             logging.warn('using querying instead of predicting')
             P = numpy.ones(len(X))
         else:
@@ -1730,7 +1783,7 @@ class LabelModel(object):
             m = jl.load(model_file)
             P = m.predict(X_new)
 
-        if all_true: # or len(X) <= _min_sample_size:
+        if all_true:  # or len(X) <= _min_sample_size:
             logging.warn('using querying instead of predicting')
             P = numpy.ones(len(X))
         else:
@@ -1801,6 +1854,7 @@ class LabelPerformance(object):
     """
     precision/recall/f1 calculation on TP/FN/FP values
     """
+
     def __init__(self, label):
         self._label = label
         self._tp = 0
@@ -1847,13 +1901,14 @@ class LabelPerformance(object):
         if self.precision == -1 or self.recall == -1 or self.precision == 0 or self.recall == 0:
             return -1
         else:
-            return 2 / (1/self.precision + 1/self.recall)
+            return 2 / (1 / self.precision + 1 / self.recall)
 
 
 class StrokeSettings(object):
     """
     json based configuration setting
     """
+
     def __init__(self, setting_file):
         self._file = setting_file
         self._setting = {}
@@ -1924,7 +1979,7 @@ def get_doc_level_inference(label_dir, ann_dir, file_key, type2insts, type2inst_
     logging.info('working on %s' % join(label_dir, label_file))
     ed = EDIRDoc(join(label_dir, label_file))
     if not isfile(join(label_dir, label_file)):
-        print( 'not a file: %s' % join(label_dir, label_file))
+        print('not a file: %s' % join(label_dir, label_file))
         return
     sd = SemEHRAnnDoc(join(ann_dir, ann_file))
     sd.learn_mappings_from_labelled(ed, type2insts, t2missed)
@@ -1948,7 +2003,7 @@ def learn_concept_mappings(output_lst_folder):
         type2insts[t] = list(type2insts[t])
     logging.info(json.dumps(type2insts))
 
-    s ='\n' * 2
+    s = '\n' * 2
     for t in type2insts_2:
         type2insts_2[t] = list(type2insts_2[t])
     s += json.dumps(type2insts_2)
@@ -2004,8 +2059,8 @@ def learn_prediction_model(label, ann_dir=None, gold_dir=None, model_file=None, 
                 lm.add_rare_label(lbl, n_true * 1.0 / len(X))
                 continue
             # ignore_mappings += data['bad_labels']
-            # lm.random_forest_learning(X, Y, output_file=ml_model_file_ptn % escape_lable_to_filename(lbl))
-            lm.svm_learning(X, Y, output_file=ml_model_file_ptn % escape_lable_to_filename(lbl))
+            lm.random_forest_learning(X, Y, output_file=ml_model_file_ptn % escape_lable_to_filename(lbl))
+            # lm.svm_learning(X, Y, output_file=ml_model_file_ptn % escape_lable_to_filename(lbl))
             # lm.gaussian_nb(X, Y, output_file=ml_model_file_ptn % escape_lable_to_filename(lbl))
             logging.debug('%s, #insts: %s, #tps: %s' % (lbl, len(X), n_true))
             # if len(Y) > 20 and (.1< n_true * 1.0 / len(Y) < .9):
@@ -2023,10 +2078,10 @@ def learn_prediction_model(label, ann_dir=None, gold_dir=None, model_file=None, 
             #     bc = BinaryClusterClassifier(lbl)
             #     bc.cluster(correct_X, incorrect_X)
             #     lm.put_binary_cluster_classifier(lbl, bc)
-                # LabelModel.cluster(correct_X, correct_Y)
-                # LabelModel.cluster(incorrect_X, incorrect_Y)
-                # logging.debug('doing KNN for %s' % lbl)
-                # LabelModel.knn_classify(X, Y, output_file=ml_model_file_ptn % lbl)
+            # LabelModel.cluster(correct_X, correct_Y)
+            # LabelModel.cluster(incorrect_X, incorrect_Y)
+            # logging.debug('doing KNN for %s' % lbl)
+            # LabelModel.knn_classify(X, Y, output_file=ml_model_file_ptn % lbl)
             # lm.decision_tree_learning(X, Y, lm,
             #                           output_file=ml_model_file_ptn % escape_lable_to_filename(lbl),
             #                           pca_dim=pca_dim,
@@ -2086,7 +2141,8 @@ def predict_label(model_file, test_ann_dir, test_gold_dir, ml_model_file_ptn, pe
                     if l != lbl:
                         complementary_classifiers.append(lm.cluster_classifier_dict[l])
                 for idx in range(len(X)):
-                    logging.debug('%s => %s' % (bc.classify(X[idx], complementary_classifiers=complementary_classifiers), Y[idx]))
+                    logging.debug(
+                        '%s => %s' % (bc.classify(X[idx], complementary_classifiers=complementary_classifiers), Y[idx]))
             lm.predict_use_model(X, Y, 0, mtp, ml_model_file_ptn % escape_lable_to_filename(lbl), performance,
                                  pca_model_file=pca_model_file,
                                  separate_performance=this_performance,
@@ -2094,9 +2150,10 @@ def predict_label(model_file, test_ann_dir, test_gold_dir, ml_model_file_ptn, pe
                                  doc_folder=test_gold_dir,
                                  label_whitelist=label_whitelist)
         lbl2performances[lbl] = this_performance
-    CustomisedRecoginiser.print_performances(lbl2performances)
+    perform_str = CustomisedRecoginiser.print_performances(lbl2performances)
     logging.debug('missed instances: %s' % data['fns'])
     performance.increase_false_negative(data['fns'])
+    return perform_str
 
 
 def escape_lable_to_filename(s):
@@ -2135,11 +2192,12 @@ def do_learn_exp(viz_file, num_dimensions=[20], ignore_context=False, separate_b
                  eHostGD=False):
     results = {}
     id2conll = {}
+    result_str = ''
     for lbl in _labels:
         logging.info('working on [%s]' % lbl)
         _learning_model_file = _learning_model_dir + '/%s.lm' % lbl
         _ml_model_file_ptn = _learning_model_dir + '/' + lbl + '_%s_DT.model'
-        _pca_model_file = None # '/afs/inf.ed.ac.uk/group/project/biomedTM/users/hwu/learning_models/%s_pca.model' % lbl
+        _pca_model_file = None  # '/afs/inf.ed.ac.uk/group/project/biomedTM/users/hwu/learning_models/%s_pca.model' % lbl
         pca_dim = None
         max_dimensions = num_dimensions
 
@@ -2184,7 +2242,7 @@ def do_learn_exp(viz_file, num_dimensions=[20], ignore_context=False, separate_b
                           id2conll=id2conll,
                           label_whitelist=_labels,
                           eHostGD=eHostGD)
-        CustomisedRecoginiser.print_performances(results)
+        result_str = CustomisedRecoginiser.print_performances(results)
     # conll_output = ''
     # for id in id2conll:
     #     doc_output = id2conll[id].conll_output
@@ -2196,6 +2254,7 @@ def do_learn_exp(viz_file, num_dimensions=[20], ignore_context=False, separate_b
     # if conll_output_file is not None:
     #     utils.save_string(conll_output, conll_output_file)
     #     logging.info('conll_output saved to [%s]' % conll_output_file)
+    return result_str
 
 
 def save_text_files(xml_dir, text_dr):
@@ -2236,7 +2295,7 @@ def relocate_annotation_pos(t, s, e, string_orig):
         return [s, e]
     candidates = []
     ito = re.finditer(r'[\s\.;\,\?\!\:\/$^](' + string_orig + r')[\s\.;\,\?\!\:\/$^]',
-                t, re.IGNORECASE)
+                      t, re.IGNORECASE)
     for mo in ito:
         # print mo.start(1), mo.end(1), mo.group(1)
         candidates.append({'dis': abs(s - mo.start(1)), 's': mo.start(1), 'e': mo.end(1), 'matched': mo.group(1)})
@@ -2252,7 +2311,7 @@ def test_eHost_doc():
     print([(e.label, e.start, e.end, e.str) for e in d.get_ess_entities()])
 
 
-if __name__ == "__main__":
+def run_learning():
     log_level = 'DEBUG'
     log_format = '[%(filename)s:%(lineno)d] %(name)s %(asctime)s %(message)s'
     logging.basicConfig(level='DEBUG', format=log_format)
@@ -2260,6 +2319,8 @@ if __name__ == "__main__":
     logging.basicConfig(level=log_level, format=log_format)
     ss = StrokeSettings('./settings/settings.json')
     settings = ss.settings
+    global _min_sample_size, _ann_dir, _gold_dir, _test_ann_dir, _test_gold_dir, _gold_text_dir, _test_text_dir, _concept_mapping, _learning_model_dir
+    global _labels, _gold_file_pattern, _ignore_mappings, _eHostGD, _cm_obj
     _min_sample_size = settings['min_sample_size']
     _ann_dir = settings['ann_dir']
     _gold_dir = settings['gold_dir']
@@ -2270,10 +2331,23 @@ if __name__ == "__main__":
     _concept_mapping = settings['concept_mapping_file']
     _learning_model_dir = settings['learning_model_dir']
     _labels = utils.read_text_file(settings['entity_types_file'])
-    _gold_file_pattern = "_ann.xml" if 'gold_file_pattern' not in settings else settings['gold_file_pattern']
+    _gold_file_pattern = "%s_ann.xml" if 'gold_file_pattern' not in settings else settings['gold_file_pattern']
     _ignore_mappings = utils.load_json_data(settings['ignore_mapping_file'])
     _eHostGD = settings['eHostGD'] if 'eHostGD' in settings else False
     _cm_obj = Concept2Mapping(_concept_mapping)
+    return do_learn_exp(settings['viz_file'],
+                        num_dimensions=[50],
+                        ignore_context=settings['ignore_context'] if 'ignore_context' in settings else False,
+                        separate_by_label=True,
+                        conll_output_file=settings['conll_output_file'], eHostGD=_eHostGD)
+
+
+if __name__ == "__main__":
+    log_level = 'DEBUG'
+    log_format = '[%(filename)s:%(lineno)d] %(name)s %(asctime)s %(message)s'
+    logging.basicConfig(level='DEBUG', format=log_format)
+    log_file = './settings/processing.log'
+    logging.basicConfig(level=log_level, format=log_format)
     # _cm_obj.load_gaz_dir(settings['concept_gaz_dir'])
 
     # 0. merging mapping & dictionaries
@@ -2293,8 +2367,3 @@ if __name__ == "__main__":
     # 4. learn umls concept to phenotype mappping
     # learn_concept_mappings(settings['gazetteer_dir'])
     # 5. learn phenotype inference
-    do_learn_exp(settings['viz_file'],
-                 num_dimensions=[100],
-                 ignore_context=settings['ignore_context'] if 'ignore_context' in settings else False,
-                 separate_by_label=True,
-                 conll_output_file=settings['conll_output_file'], eHostGD=_eHostGD)

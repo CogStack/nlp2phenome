@@ -1,0 +1,20 @@
+{
+  "ann_dir": "/afs/inf.ed.ac.uk/group/project/biomedTM/users/hwu/doc_anns/taydev-keywords-Conn",
+  "gold_dir": "/afs/inf.ed.ac.uk/group/project/biomedTM/brainReports/data/tayside/gold/dev/taydev-keywords-Conn",
+  "dev_full_text_dir": "/afs/inf.ed.ac.uk/group/project/biomedTM/users/hwu/input_docs/taydev-keywords-Conn",
+  "dev_semehr_output_dir": "/afs/inf.ed.ac.uk/group/project/biomedTM/users/hwu/semehr_output/tayside_dev",
+  "test_semehr_output_dir": "/afs/inf.ed.ac.uk/group/project/biomedTM/users/hwu/semehr_output/taytest-keywords-Conn",
+  "test_ann_dir": "/afs/inf.ed.ac.uk/group/project/biomedTM/users/hwu/doc_anns/taytest-keywords-Conn/",
+  "test_fulltext_dir": "/afs/inf.ed.ac.uk/group/project/biomedTM/users/hwu/input_docs/taytest-keywords-Conn/",
+  "test_gold_dir": "/afs/inf.ed.ac.uk/group/project/biomedTM/brainReports/data/tayside/gold/test/taytest-keywords-Conn",
+  "concept_mapping_file": "/afs/inf.ed.ac.uk/group/project/biomedTM/users/hwu/merged_concept_mapping.json",
+  "concept_gaz_dir": "/Users/honghan.wu/Documents/working/SemEHR-Working/toolkits/bio-yodie-1-2-1/finalize/tayside_ext_gazetteer",
+  "learning_model_dir": "/afs/inf.ed.ac.uk/group/project/biomedTM/users/hwu/learning_models/taydev-keywords-Conn",
+  "entity_types_file": "./entity_types_modifiers.txt",
+  "ignore_mapping_file": "/afs/inf.ed.ac.uk/group/project/biomedTM/users/hwu/empty_mappings.json",
+  "min_sample_size": 5,
+  "viz_file": "/Users/honghan.wu/Desktop/dt_viz_files/dt_%s",
+  "gazetteer_dir": "/Users/honghan.wu/Documents/working/SemEHR-Working/toolkits/bio-yodie-1-2-1/finalize/tayside_ext_gazetteer",
+  "ignore_context": true,
+  "conll_output_file": "/Users/honghan.wu/Documents/UoE/semehr-usecase/tayside_ext_conll_modifiers.txt"
+}

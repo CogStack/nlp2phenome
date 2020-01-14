@@ -1,9 +1,10 @@
 import xml.etree.ElementTree as ET
 import datetime
-import csv
-import utils
-from os.path import join
 import logging
+from os import listdir
+from os.path import isfile, join
+import utils
+import csv
 
 
 class AnnConverter(object):
@@ -57,6 +58,28 @@ class AnnConverter(object):
         return elem_ann
 
     @staticmethod
+    def load_ann_file(f):
+        tree = ET.parse(f)
+        doc = tree.getroot()
+        ann2label = {}
+        ann2freq = {}
+        for ann in doc.findall("annotation"):
+            m_id = ann.find("mention").attrib["id"]
+            cm = doc.find('.//classMention[@id="' + m_id + '"]')
+            cls =cm.find('mentionClass').attrib["id"]
+            m_span = ann.find("span").attrib
+            annid = 'm-%s-%s' % (m_span['start'], m_span['end'])
+            m_text = ann.find("spannedText").text
+            freq = 0
+            if annid not in ann2freq:
+                ann2freq[annid] = 1
+            else:
+                ann2freq[annid] += 1
+            annid_freq = '%s:%s' % (annid, ann2freq[annid])
+            ann2label[annid_freq] = {"text": m_text, "class": cls}
+        return ann2label
+
+    @staticmethod
     def convert_csv_annotations(csv_file, text_folder, ann_folder,
                                 id_pattern='%s-%s', ann_file_pattern='%s.knowtator.xml'):
         with open(csv_file, newline='') as cf:
@@ -73,6 +96,32 @@ class AnnConverter(object):
                     xml = ET.tostring(elem_annotations, encoding='utf8', method='xml')
                     utils.save_string(xml, join(ann_folder, ann_file_pattern % r['doc_id']))
 
+    @staticmethod
+    def populate_inter_annotator_results(ann_folder_1, ann_folder_2, output_file, missing_file,
+                                         correct_labels = ["VERIFIED_CORRECT"]):
+        ann_files = [f for f in listdir(ann_folder_1) if isfile(join(ann_folder_1, f))]
+        all_mentions = 0
+        missed = []
+        mismatched = []
+        for f in ann_files:
+            ann1 = AnnConverter.load_ann_file(join(ann_folder_1, f))
+            ann2 = AnnConverter.load_ann_file(join(ann_folder_2, f))
+            all_mentions += len(ann1)
+            for ann in ann1:
+                if ann not in ann2:
+                    missed.append('%s\t%s\t%s' % (ann, ann1[ann]['text'], ann1[ann]['class']))
+                elif ann2[ann]['class'] != ann1[ann]['class'] and ann1[ann]['class'] not in correct_labels:
+                    mismatched.append('%s\t%s\t%s\t%s\t%s' % (f, ann, ann1[ann]['text'], ann1[ann]['class'], ann2[ann]['class']))
+        print('\n'.join(mismatched))
+        print(len(missed), all_mentions)
+        utils.save_string('\n'.join(mismatched), output_file)
+        utils.save_string('\n'.join(missed), missing_file)
+
 
 if __name__ == "__main__":
-    pass
+    # AnnConverter.load_ann_file('S:/NLP/annotation_Steven/stroke_nlp/saved/Stroke_id_105.txt.knowtator.xml')
+    # AnnConverter.populate_inter_annotator_results('S:/NLP/annotation_Kristiina/stroke_nlp/saved',
+    # 'S:/NLP/annotation_Steven/stroke_nlp/saved', 'mismatched.tsv')
+    AnnConverter.populate_inter_annotator_results('S:/NLP/annotation_Steven/stroke_nlp/saved',
+                                                  'P:/wuh/SemEHR-working/outputs/nlp2phenome',
+                                                  'kristiina_corrections.tsv', 'steven_added.tsv')

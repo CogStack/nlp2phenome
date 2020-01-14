@@ -1,0 +1,20 @@
+{
+  "ann_dir": "z:/users/hwu/doc_anns/tayside_dev",
+  "gold_dir": "z:/brainReports/data/tayside/gold/dev/taydevall-Will",
+  "dev_full_text_dir": "z:/users/hwu/input_docs/tayside_dev",
+  "dev_semehr_output_dir": "z:/users/hwu/semehr_output/tayside_dev",
+  "test_semehr_output_dir": "z:/users/hwu/semehr_output/taytestall-Will",
+  "test_ann_dir": "z:/users/hwu/doc_anns/taytestall-Will/",
+  "test_fulltext_dir": "z:/users/hwu/input_docs/taytestall-Will/",
+  "test_gold_dir": "z:/brainReports/data/tayside/gold/test/taytestall-Will",
+  "concept_mapping_file": "z:/users/hwu/merged_concept_mapping.json",
+  "concept_gaz_dir": "/Users/honghan.wu/Documents/working/SemEHR-Working/toolkits/bio-yodie-1-2-1/finalize/tayside_gazetteer",
+  "learning_model_dir": "z:/users/hwu/learning_models/tayside-will",
+  "entity_types_file": "./entity_types_phenotypes.txt",
+  "ignore_mapping_file": "z:/users/hwu/empty_mappings.json",
+  "min_sample_size": 5,
+  "viz_file": "z:/users/hwu/tmp/dt_%s",
+  "gazetteer_dir": "/Users/honghan.wu/Documents/working/SemEHR-Working/toolkits/bio-yodie-1-2-1/finalize/tayside_gazetteer",
+  "ignore_context": true,
+  "conll_output_file": "z:/users/hwu/tmp/tayside_conll.txt"
+}

@@ -5,7 +5,7 @@ import logging
 from os.path import join
 from ann_converter import AnnConverter
 from os import listdir
-from os.path import isfile
+from os.path import isfile, exists
 
 
 def predict(settings):
@@ -18,9 +18,16 @@ def predict(settings):
     _cm_obj = Concept2Mapping(_concept_mapping)
 
     doc2predicted = {}
+    no_models_labels = []
     for phenotype in _labels:
         logging.info('working on [%s]' % phenotype)
         _learning_model_file = _learning_model_dir + '/%s.lm' % phenotype
+
+        if not exists(_learning_model_file):
+            # if previous learnt model not exists, skip
+            no_models_labels.append(phenotype)
+            continue
+        
         _ml_model_file_ptn = _learning_model_dir + '/' + phenotype + '_%s_DT.model'
 
         lm = LabelModel.deserialise(_learning_model_file)
@@ -48,6 +55,46 @@ def predict(settings):
                                                pca_model_file=None,
                                                doc2predicted=doc2predicted,
                                                doc_anns=doc_anns)
+    return doc2predicted, no_models_labels
+
+
+def hybrid_prediciton(settings):
+    d2p, labels2work = predict(settings)
+    ann_dir = settings['test_ann_dir']
+    test_text_dir = settings['test_fulltext_dir']
+    _concept_mapping = settings['concept_mapping_file']
+    _learning_model_dir = settings['learning_model_dir']
+    _labels = utils.read_text_file(settings['entity_types_file'])
+    ignore_mappings = utils.load_json_data(settings['ignore_mapping_file'])
+    _cm_obj = Concept2Mapping(_concept_mapping)
+    file_keys = [f[:f.rfind('.')].replace('se_ann_', '') for f in listdir(ann_dir) if isfile(join(ann_dir, f))]
+    logging.info('labels to use direct nlp prediction: [%s]' % labels2work)
+    
+    # convert SemEHRAnn to PhenotypeAnn
+    doc2predicted = {}
+    for d in d2p:
+        for t in d2p[d]:
+            ann = t['ann']
+            if hasattr(ann, 'cui'):
+                lbl = _cm_obj.concept2label[ann.cui][0]
+                pheAnn = PhenotypeAnn(ann.str, ann.start, ann.end, ann.negation, ann.temporality, ann.experiencer,
+                                          'StudyName', lbl)
+                put_ann_label(lbl, pheAnn, doc2predicted, d)
+            else:
+                put_ann_label(ann.minor_type, ann, doc2predicted, d)
+    for fk in file_keys:
+        cr = CustomisedRecoginiser(join(ann_dir, 'se_ann_%s.json' % fk), _concept_mapping)
+        d = fk
+        for ann in cr.annotations:
+            if ann.cui in _cm_obj.concept2label:
+                lbl = _cm_obj.concept2label[ann.cui][0]
+                if lbl in labels2work:
+                    pheAnn = PhenotypeAnn(ann.str, ann.start, ann.end, ann.negation, ann.temporality, ann.experiencer,
+                                          'StudyName', lbl)
+                    put_ann_label(lbl, pheAnn, doc2predicted, d)
+        for ann in cr.phenotypes:
+            if ann.minor_type in labels2work:
+                put_ann_label(ann.minor_type, ann, doc2predicted, d)
     return doc2predicted
 
 
@@ -59,14 +106,14 @@ def direct_nlp_prediction(settings):
     _labels = utils.read_text_file(settings['entity_types_file'])
     ignore_mappings = utils.load_json_data(settings['ignore_mapping_file'])
     _cm_obj = Concept2Mapping(_concept_mapping)
-    file_keys = [f.split('.')[0] for f in listdir(ann_dir) if isfile(join(ann_dir, f))]
+    file_keys = [f[:f.rfind('.')].replace('se_ann_', '') for f in listdir(ann_dir) if isfile(join(ann_dir, f))]
     doc2predicted = {}
     for fk in file_keys:
-        cr = CustomisedRecoginiser(join(ann_dir, '%s.json' % fk), _concept_mapping)
-        d = cr.full_text_file_pattern % fk
+        cr = CustomisedRecoginiser(join(ann_dir, 'se_ann_%s.json' % fk), _concept_mapping)
+        d = fk
         for ann in cr.annotations:
-            if ann.cui in _concept_mapping.cui2label:
-                lbl = _concept_mapping.cui2label[ann.cui]
+            if ann.cui in _cm_obj.concept2label:
+                lbl = _cm_obj.concept2label[ann.cui][0]
                 pheAnn = PhenotypeAnn(ann.str, ann.start, ann.end, ann.negation, ann.temporality, ann.experiencer,
                                       'StudyName', lbl)
                 put_ann_label(lbl, pheAnn, doc2predicted, d)
@@ -95,13 +142,21 @@ def predict_to_eHOST_results(predict_setting):
     if 'predict_mode' in ss.settings and ss.settings['predict_mode'] == 'direct_nlp':
         logging.info('predicting with direct nlp...')
         predicted_results = direct_nlp_prediction(ss.settings)
+    elif 'predict_mode' in ss.settings and ss.settings['predict_mode'] == 'hybrid':
+        predicted_results = hybrid_prediciton(ss.settings)
     else:
         logging.info('predicting...')
         predicted_results = predict(ss.settings)
     output_eHOST_format(predicted_results, ss.settings['output_folder'])
     logging.info('results saved to %s' % ss.settings['output_folder'])
+    if 'output_file' in ss.settings:
+        d2ann = {}
+        for d in predicted_results:
+            d2ann[d] = [{'label': t['label'], 'ann': t['ann'].to_dict()} for t in predicted_results[d]]
+        utils.save_json_array(d2ann, ss.settings['output_file'])
 
 
 if __name__ == "__main__":
     logging.basicConfig(level='DEBUG', format='[%(filename)s:%(lineno)d] %(name)s %(asctime)s %(message)s')
-    predict_to_eHOST_results('./settings/prediction_task.json')
+    # predict_to_eHOST_results('./settings/prediction_task_direct.json')
+    predict_to_eHOST_results('./settings/prediction_task_ukb_final.json')
