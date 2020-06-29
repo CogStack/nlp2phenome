@@ -25,7 +25,8 @@ import graphviz
 import numpy
 import logging
 import re
-import reportreader as rr
+# import reportreader as rr
+import mention_pattern as mp
 import sys
 
 
@@ -472,6 +473,11 @@ class SemEHRAnn(ContextedAnn):
         self._sty = sty
         self._pref = pref
         self._ann_type = ann_type
+        self._ruled_by = []
+
+    @property
+    def ruled_by(self):
+        return self._ruled_by
 
     @property
     def cui(self):
@@ -821,7 +827,7 @@ class CustomisedRecoginiser(SemEHRAnnDoc):
         if self._full_text is None and self._full_text_folder is not None and self._full_text_file_pattern is not None:
             self._full_text = utils.read_text_file_as_string(
                 join(self._full_text_folder,
-                     self._full_text_file_pattern % fk), encoding='cp1252')
+                     self._full_text_file_pattern % fk), encoding='utf-8')
         return self._full_text
 
     def relocate_all_anns(self, fk):
@@ -885,6 +891,8 @@ class CustomisedRecoginiser(SemEHRAnnDoc):
             if a.cui not in self.concept2label:
                 continue
             if a.cui in ignore_mappings:
+                continue
+            if len(a.ruled_by) > 0:
                 continue
             if t in self.concept2label[a.cui]:
                 if no_context:
@@ -1350,6 +1358,15 @@ class LabelModel(object):
                     not_matched_gds.append(e.id)
 
             anns = cr.get_anns_by_label(self.label, ignore_mappings=ignore_mappings, no_context=ignore_context)
+            if len(_annotated_anns) > 0:
+                if '%s.txt' % fk not in _annotated_anns:
+                    continue
+                kept_anns = []
+                for a in anns:
+                    for aa in _annotated_anns['%s.txt' % fk]:
+                        if int(aa['s']) == a.start and int(aa['e']) == a.end:
+                            kept_anns.append(a)
+                anns = kept_anns
             for a in anns:
                 logging.debug('%s, %s, %s' % (a.str, a.start, a.end))
                 multiple_true_positives = 0
@@ -1671,8 +1688,9 @@ class LabelModel(object):
     @staticmethod
     def predict_use_simple_stats(tp_ratio, Y, multiple_tps, performance, ratio_cut_off=0.15, separate_performance=None,
                                  id2conll=None, doc_anns=None, file_pattern=None, doc_folder=None,
-                                 label_whitelist=None):
+                                 label_whitelist=None, mp_predicted=None):
         P = numpy.ones(len(Y)) if tp_ratio >= ratio_cut_off else numpy.zeros(len(Y))
+        P = LabelModel.merge_with_pattern_prediction(P, mp_predicted)
         if multiple_tps > 0:
             performance.increase_true_positive(multiple_tps)
             if separate_performance is not None:
@@ -1681,6 +1699,18 @@ class LabelModel(object):
                                    id2conll=id2conll, doc_anns=doc_anns, file_pattern=file_pattern,
                                    doc_folder=doc_folder,
                                    label_whitelist=label_whitelist)
+
+    @staticmethod
+    def merge_with_pattern_prediction(y_pred, mp_predict):
+    	if mp_predict is None:
+    		return y_pred
+    	y_merged = []
+    	print('>>>', y_pred, mp_predict)
+    	for idx in range(len(y_pred)):
+    		y_merged.append(y_pred[idx])
+    		if y_pred[idx] == 1 and mp_predict[idx] == 0:
+    			y_merged[idx] = 0
+    	return y_merged
 
     @staticmethod
     def predict_use_simple_stats_in_action(tp_ratio, item_size, ratio_cut_off=0.15,
@@ -1703,8 +1733,13 @@ class LabelModel(object):
     @staticmethod
     def cal_performance(P, Y, performance, separate_performance=None,
                         id2conll=None, doc_anns=None, file_pattern=None, doc_folder=None, label_whitelist=None):
+        
+        P = numpy.asarray(P).flatten().tolist()
+        Y = numpy.asarray(Y).flatten().tolist()
+        print('!!>>>>', P, Y)
         doc2predicted = {}
         for idx in range(len(P)):
+            print(P[idx], Y[idx], P[idx] == Y[idx])
             if P[idx] == Y[idx]:
                 if P[idx] == 1.0:
                     performance.increase_true_positive()
@@ -1738,7 +1773,7 @@ class LabelModel(object):
     @staticmethod
     def predict_use_model(X, Y, fns, multiple_tps, model_file, performance,
                           pca_model_file=None, separate_performance=None,
-                          id2conll=None, doc_anns=None, file_pattern=None, doc_folder=None, label_whitelist=None):
+                          id2conll=None, doc_anns=None, file_pattern=None, doc_folder=None, label_whitelist=None, mp_predicted=None):
         all_true = False
         if not isfile(model_file):
             logging.info('model file NOT FOUND: %s' % model_file)
@@ -1763,6 +1798,7 @@ class LabelModel(object):
             P = numpy.ones(len(X))
         else:
             logging.info('instance size %s' % len(P))
+        P = LabelModel.merge_with_pattern_prediction(P, mp_predicted)
         LabelModel.cal_performance(P, Y, performance, separate_performance,
                                    id2conll=id2conll, doc_anns=doc_anns, file_pattern=file_pattern,
                                    doc_folder=doc_folder, label_whitelist=label_whitelist)
@@ -2104,7 +2140,7 @@ def predict_label(model_file, test_ann_dir, test_gold_dir, ml_model_file_ptn, pe
                   file_pattern='%s-ann.xml',
                   id2conll=None,
                   label_whitelist=None,
-                  eHostGD=False):
+                  eHostGD=False, mention_pattern=None):
     lm = LabelModel.deserialise(model_file)
     lm.max_dimensions = max_dimension
     data = lm.load_data(test_ann_dir, test_gold_dir, ignore_mappings=ignore_mappings, ignore_context=ignore_context,
@@ -2124,13 +2160,16 @@ def predict_label(model_file, test_ann_dir, test_gold_dir, ml_model_file_ptn, pe
         Y = data['lbl2data'][lbl]['Y']
         mtp = data['lbl2data'][lbl]['multiple_tps']
         doc_anns = data['lbl2data'][lbl]['doc_anns']
+        mp_predicted = None
+       	if mention_pattern is not None:
+       	    mp_predicted = mention_pattern.predict(doc_anns)
         if lbl in lm.rare_labels:
             logging.info('%s to be predicted using %s' % (lbl, lm.rare_labels[lbl]))
             LabelModel.predict_use_simple_stats(lm.rare_labels[lbl], Y, mtp,
                                                 performance, separate_performance=this_performance,
                                                 id2conll=id2conll, doc_anns=doc_anns, file_pattern=file_pattern,
                                                 doc_folder=test_gold_dir,
-                                                label_whitelist=label_whitelist)
+                                                label_whitelist=label_whitelist, mp_predicted=mp_predicted)
         else:
             if len(X) > 0:
                 logging.debug('predict data: %s, dimensions %s, insts %s' % (lbl, len(X[0]), len(X)))
@@ -2148,7 +2187,7 @@ def predict_label(model_file, test_ann_dir, test_gold_dir, ml_model_file_ptn, pe
                                  separate_performance=this_performance,
                                  id2conll=id2conll, doc_anns=doc_anns, file_pattern=file_pattern,
                                  doc_folder=test_gold_dir,
-                                 label_whitelist=label_whitelist)
+                                 label_whitelist=label_whitelist, mp_predicted=mp_predicted)
         lbl2performances[lbl] = this_performance
     perform_str = CustomisedRecoginiser.print_performances(lbl2performances)
     logging.debug('missed instances: %s' % data['fns'])
@@ -2189,7 +2228,7 @@ def populate_validation_results():
 
 
 def do_learn_exp(viz_file, num_dimensions=[20], ignore_context=False, separate_by_label=False, conll_output_file=None,
-                 eHostGD=False):
+                 eHostGD=False, mention_pattern=None):
     results = {}
     id2conll = {}
     result_str = ''
@@ -2241,7 +2280,7 @@ def do_learn_exp(viz_file, num_dimensions=[20], ignore_context=False, separate_b
                           file_pattern=_gold_file_pattern,
                           id2conll=id2conll,
                           label_whitelist=_labels,
-                          eHostGD=eHostGD)
+                          eHostGD=eHostGD, mention_pattern=mention_pattern)
         result_str = CustomisedRecoginiser.print_performances(results)
     # conll_output = ''
     # for id in id2conll:
@@ -2321,6 +2360,10 @@ def run_learning():
     settings = ss.settings
     global _min_sample_size, _ann_dir, _gold_dir, _test_ann_dir, _test_gold_dir, _gold_text_dir, _test_text_dir, _concept_mapping, _learning_model_dir
     global _labels, _gold_file_pattern, _ignore_mappings, _eHostGD, _cm_obj
+    global _annotated_anns
+    _annotated_anns = {}
+    if 'annotated_anns' in settings['annotated_anns_file']:
+        _annotated_anns = utils.load_json_data(settings['annotated_anns_file']) 
     _min_sample_size = settings['min_sample_size']
     _ann_dir = settings['ann_dir']
     _gold_dir = settings['gold_dir']
@@ -2335,11 +2378,13 @@ def run_learning():
     _ignore_mappings = utils.load_json_data(settings['ignore_mapping_file'])
     _eHostGD = settings['eHostGD'] if 'eHostGD' in settings else False
     _cm_obj = Concept2Mapping(_concept_mapping)
+
+    mp_inst = mp.MentionPattern(settings['pattern_folder'], _cm_obj.cui2label, settings['csv_file'], _test_ann_dir)
     return do_learn_exp(settings['viz_file'],
                         num_dimensions=[50],
                         ignore_context=settings['ignore_context'] if 'ignore_context' in settings else False,
                         separate_by_label=True,
-                        conll_output_file=settings['conll_output_file'], eHostGD=_eHostGD)
+                        conll_output_file=settings['conll_output_file'], eHostGD=_eHostGD, mention_pattern=mp_inst)
 
 
 if __name__ == "__main__":
