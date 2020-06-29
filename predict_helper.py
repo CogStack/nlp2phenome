@@ -1,5 +1,7 @@
-from nlp_to_phenome import LabelModel, LabelPerformance, StrokeSettings, Concept2Mapping, escape_lable_to_filename, \
-    CustomisedRecoginiser, PhenotypeAnn
+from nlp_to_phenome import StrokeSettings, Concept2Mapping, escape_lable_to_filename
+from LabelModel import LabelModel, CustomisedRecoginiser
+from annotation_docs import PhenotypeAnn
+from learners import PhenomeLearners
 import utils
 import logging
 from os.path import join
@@ -42,20 +44,34 @@ def predict(settings):
             X = data['lbl2data'][lbl]['X']
             logging.debug(X)
             doc_anns = data['lbl2data'][lbl]['doc_anns']
-            if lbl in lm.rare_labels:
-                logging.info('%s to be predicted using %s' % (lbl, lm.rare_labels[lbl]))
-                LabelModel.predict_use_simple_stats_in_action(lm.rare_labels[lbl],
-                                                              item_size=len(X),
-                                                              doc2predicted=doc2predicted,
-                                                              doc_anns=doc_anns)
-            else:
-                if len(X) > 0:
-                    logging.debug('%s, dimensions %s' % (lbl, len(X[0])))
-                lm.predict_use_model_in_action(X, model_file=_ml_model_file_ptn % escape_lable_to_filename(lbl),
-                                               pca_model_file=None,
-                                               doc2predicted=doc2predicted,
-                                               doc_anns=doc_anns)
+            label_model_predict(lm, _ml_model_file_ptn, data['lbl2data'], doc2predicted)
     return doc2predicted, no_models_labels
+
+
+def label_model_predict(lm, model_file_pattern, lbl2data, doc2predicted,
+                        mention_pattern=None, mention_prediction_param=None):
+    for lbl in lbl2data:
+        mp_predicted = None
+        if mention_pattern is not None:
+            mp_predicted = mention_pattern.predict(lbl2data[lbl]['doc_anns'], cr=mention_prediction_param)
+        X = lbl2data[lbl]['X']
+        logging.debug(X)
+        doc_anns = lbl2data[lbl]['doc_anns']
+        if lbl in lm.rare_labels:
+            logging.info('%s to be predicted using %s' % (lbl, lm.rare_labels[lbl]))
+            PhenomeLearners.predict_use_simple_stats_in_action(lm.rare_labels[lbl],
+                                                               item_size=len(X),
+                                                               doc2predicted=doc2predicted,
+                                                               doc_anns=doc_anns,
+                                                               mp_predicted=mp_predicted)
+        else:
+            if len(X) > 0:
+                logging.debug('%s, dimensions %s' % (lbl, len(X[0])))
+            lm.predict_use_model_in_action(X, model_file=model_file_pattern % escape_lable_to_filename(lbl),
+                                           pca_model_file=None,
+                                           doc2predicted=doc2predicted,
+                                           doc_anns=doc_anns,
+                                           mp_predicted=mp_predicted)
 
 
 def hybrid_prediciton(settings):

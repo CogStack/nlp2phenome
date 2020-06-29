@@ -63,7 +63,7 @@ class AbstractedSentence(object):
         else:
             return None
         return ta
-    
+
     def get_related_tokens(self, t):
         ret = []
         for tk in self._parsed:
@@ -87,7 +87,7 @@ class TokenAbstraction(object):
     @property
     def vcontext(self):
         return self._vcontext
-        
+
     @property
     def children(self):
         return self._children
@@ -103,7 +103,7 @@ class TokenAbstraction(object):
     @property
     def verbs(self):
         return self._verbs
-    
+
     @property
     def token(self):
         return self._t
@@ -114,9 +114,9 @@ class TokenAbstraction(object):
         r = t
         while (t.head != t) and t.dep_ not in ['ROOT', 'relcl', 'acl', 'advcl']:
             t = t.head
-            if t.dep_ in ['ccomp'] :
+            if t.dep_ in ['ccomp']:
                 self._subject = [s for s in t.children if s.dep_ in [u"nsubj", 'nsubjpass', 'ROOT', 'pobj']]
-            if t.pos_ in ['VERB'] :
+            if t.pos_ in ['VERB']:
                 self._vcontext += [s for s in t.children if s.dep_ in ["neg", 'advmod']]
             r = t
         if t is not None:
@@ -129,36 +129,27 @@ class TokenAbstraction(object):
                 if self._subject is None:
                     self._subject = [s for s in t.children if s.dep_ in [u"nsubj", 'nsubjpass', 'ROOT']]
         self._root = r
-        
-    def find_parent_dep_until_(self, t, pos):
-        while (t.head != t) and t.dep_ != pos:
-            t = t.head
-        if t.dep_ != pos:
-            return None
-        else:
-            return t
-    
+
     def do_abstract_waterfall(self, entity_start, entity_end):
         t = self._t
         seq = []
         while (t.head != t) and t.dep_ not in ['ROOT', 'relcl', 'acl', 'advcl']:
-            t = t.head            
+            t = t.head
             if t.idx > entity_end or (t.idx + len(t.text) < entity_start):
-                seq.append((t.text, t.dep_, t.pos_) )
+                seq.append((t.text, t.dep_, t.pos_))
         seq.reverse()
         return seq
-    
+
     def do_abstract_descendent(self):
         return [c for c in self._t.children]
 
-
     def to_dict(self):
-        return {'children': [t.text for t in self.children], 'root': self.root.text, 'subject': [s.text for s in self.subject], 'verbs': [v.text for v in self.verbs]}
-
+        return {'children': [t.text for t in self.children], 'root': self.root.text,
+                'subject': [s.text for s in self.subject], 'verbs': [v.text for v in self.verbs]}
 
 
 class MentionPattern(object):
-    def __init__(self, pattern_folder, cui2icd, csv_file, ann_folder):
+    def __init__(self, pattern_folder, cui2icd, csv_file=None, ann_folder=None, in_action=False):
         self._ptn_folder = pattern_folder
         self._ref_good_ptns = None
         self._ref_bad_ptns = None
@@ -167,15 +158,25 @@ class MentionPattern(object):
         self._df = None
         self._nlp = get_nlp_lg()
         self._ann_folder = ann_folder
+        self._good_ptns = None
+        self._bad_ptns = None
+        self._in_action = in_action
         self.load()
 
-    def load(self):        
-        self._df = pd.read_csv(self._csv_file)
+    def load(self):
+        if self._csv_file is not None:
+            self._df = pd.read_csv(self._csv_file)
+        if self._in_action:
+            g, b = MentionPattern.load_ref_patterns(self._ptn_folder, 'zzzz')
+            self._good_ptns = g
+            self._bad_ptns = b
 
     @staticmethod
     def load_ref_patterns(ptn_folder, ignore_chapter):
-        good_p = MentionPattern.load_patterns(ptn_folder, to_load=lambda f: f.find('good') >0 and f.find('%s_' % ignore_chapter)!=0)
-        bad_p = MentionPattern.load_patterns(ptn_folder, to_load=lambda f: f.find('bad') >0 and f.find('%s_' % ignore_chapter)!=0)
+        good_p = MentionPattern.load_patterns(ptn_folder, to_load=lambda f: f.find('good') > 0 and f.find(
+            '%s_' % ignore_chapter) != 0)
+        bad_p = MentionPattern.load_patterns(ptn_folder, to_load=lambda f: f.find('bad') > 0 and f.find(
+            '%s_' % ignore_chapter) != 0)
         return good_p, bad_p
 
     @staticmethod
@@ -189,18 +190,26 @@ class MentionPattern(object):
         """
         doc_anns - [{'d': fk, 'ann': a, 'label': self.label}]
         """
+        self.read_semehr_anns_by_functions(doc_anns,
+                                           get_sent_func=lambda dd: utils.load_json_data(dd)['sentences'],
+                                           get_text_func=lambda dd: self._df[self._df['doc_id'] == dd]['text'].iloc[0],
+                                           container=container)
+
+    def read_semehr_anns_by_functions(self, doc_anns, get_sent_func, get_text_func, container):
         cur_d = None
         cur_sents = None
         for da in doc_anns:
             d = 'se_ann_%s.json' % da['d']
             if d != cur_d:
-                cur_sents = utils.load_json_data(join(self._ann_folder, d))['sentences']
+                cur_sents = get_sent_func(d)
                 cur_d = d
             a = da['ann']
             ch = self._cui2icd[a.cui]
             sent = MentionPattern.get_sent_by_pos(cur_sents, a.start, a.end)
-            win = self._df[self._df['doc_id'] == da['d']]['text'].iloc[0][sent['start']:sent['end']]
-            container.append({'ch': ch, 'd': da['d'], 's': a.start, 'e': a.end, 's_s': sent['start'], 's_e': sent['end'], 'win':win})
+            win = get_text_func(da['d'])[sent['start']:sent['end']]
+            container.append(
+                {'ch': ch, 'd': da['d'], 's': a.start, 'e': a.end, 's_s': sent['start'], 's_e': sent['end'],
+                 'win': win})
 
     def abstract_ann_pattern(self, ann):
         abss = AbstractedSentence(2)
@@ -218,53 +227,60 @@ class MentionPattern(object):
         for ann in anns:
             ret = self.abstract_ann_pattern(ann)
             if ret is not None:
-                good_ref, bad_ref = MentionPattern.load_ref_patterns(self._ptn_folder, ann['ch'])
+                good_ref = self._good_ptns
+                bad_ref = self._bad_ptns
+                if not self._in_action:
+                    good_ref, bad_ref = MentionPattern.load_ref_patterns(self._ptn_folder, ann['ch'])
                 good_match = MentionPattern.compute_similar_from_ref(ret, good_ref, self._nlp)
                 bad_match = MentionPattern.compute_similar_from_ref(ret, bad_ref, self._nlp)
-                ctx = '|'.join([e[0] for e in ret['pattern']])
+                # ctx = '|'.join([e[0] for e in ret['pattern']])
                 cls = MentionPattern.classify_by_pattern_matches(good_match, bad_match, self._nlp)
-
-                print('>>>', ctx, good_match, bad_match, cls)
                 preds.append(cls)
             else:
-            	preds.append(-1)
+                preds.append(-1)
         return preds
 
-    def predict(self, doc_anns):
+    def predict(self, doc_anns, cr=None):
         anns = []
-        self.read_semehr_anns(doc_anns, anns)
+        if cr is None:
+            self.read_semehr_anns(doc_anns, anns)
+        else:
+            # single document anns to be read by CustomisedRecoginiser
+            self.read_semehr_anns_by_functions(doc_anns, get_sent_func=lambda dd: cr.sentences,
+                                               get_text_func=lambda dd:cr.full_text, container=anns)
         return self.classify_anns(anns)
 
     @staticmethod
     def load_patterns(ptn_folder, to_load=lambda f: True):
-        return [utils.load_json_data(join(ptn_folder, f)) for f in listdir(ptn_folder) if to_load(f) and isfile(join(ptn_folder, f))]
+        return [utils.load_json_data(join(ptn_folder, f)) for f in listdir(ptn_folder) if
+                to_load(f) and isfile(join(ptn_folder, f))]
 
     @staticmethod
     def sim_seqs(s1, s2, nlp, last_k=2):
         scores = 0.0
         k = min(last_k, len(s1), len(s2))
-        for i in range(1, k+1):
+        for i in range(1, k + 1):
             t1, t2 = nlp(' '.join([s1[-1 * i], s2[-1 * i]]))
             if t1.vector_norm > 0 and t2.vector_norm > 0:
                 scores += t1.similarity(t2)
         return scores / k
 
     @staticmethod
-    def get_pattern_group(p):    
-        mp = p if len(p)<=2 else p[-2:]
+    def get_pattern_group(p):
+        mp = p if len(p) <= 2 else p[-2:]
         return '-'.join([e[2] for e in mp])
 
     @staticmethod
     def compute_similar_from_ref(ret, ref_good_ptns, nlp, threshold=0.7):
         p = ret['pattern']
         ctxt = '|'.join([e[0] for e in p])
-    #     print('>>>working on %s' % ctxt)
+        #     print('>>>working on %s' % ctxt)
         if len(ctxt) == 0:
             return None
         grp = MentionPattern.get_pattern_group(p)
         entried_scores = []
         for ref_ptn in ref_good_ptns:
-            if grp in ref_ptn:            
+            if grp in ref_ptn:
                 for inst in ref_ptn[grp]:
                     score = MentionPattern.sim_seqs([e[0] for e in p], ref_ptn[grp][inst]['list'], nlp)
                     if score > threshold:
@@ -275,15 +291,21 @@ class MentionPattern(object):
             supports = sum([s[1] for s in entried_scores])
             avg_score = total / supports
             # print('\tscore %s, support %s, %s|%s' % (avg_score, supports, ret['subject'], ret['vcontect']))
-            return {'score': avg_score, 'supports': supports, 'subject': [t.text for t in ret['subject']], 
+            return {'score': avg_score, 'supports': supports, 'subject': [t.text for t in ret['subject']],
                     'context': [t.text for t in ret['vcontect']]}
         else:
             return None
-                
-    @staticmethod        
-    def classify_by_pattern_matches(good_match, bad_match, nlp, 
-                                    bad_subjs=['son', 'daughter', 'manager', 'wife', 'I', 'one', 'anyone', "questions", "someone", "child", "neighbour", "invesitigation", "screening", "assessment"], 
-                                    bad_context=['not', 'mistakenly', 'likely', 'ie']):
+
+    @staticmethod
+    def classify_by_pattern_matches(good_match, bad_match, nlp,
+                                    bad_subjs=None,
+                                    bad_context=None):
+        if bad_context is None:
+            bad_context = ['not', 'mistakenly', 'likely', 'ie']
+        if bad_subjs is None:
+            bad_subjs = ['son', 'daughter', 'manager', 'wife', 'I', 'one', 'anyone', "questions",
+                         "someone", "child", "neighbour", "invesitigation", "screening",
+                         "assessment"]
         if good_match is None and bad_match is None:
             return -1
         if good_match is None:
@@ -291,7 +313,7 @@ class MentionPattern(object):
         # elif bad_match is None:
         #     return 1
         else:
-            sub = good_match['subject']        
+            sub = good_match['subject']
             ctx = good_match['context']
             if MentionPattern.lists_sim_enough(sub, bad_subjs, nlp) == 1:
                 return 0
@@ -301,7 +323,8 @@ class MentionPattern(object):
             if bad_match is None:
                 return 1
             else:
-                return 1 if good_match['score'] * good_match['supports'] >= bad_match['score'] * bad_match['supports'] else 0
+                return 1 if good_match['score'] * good_match['supports'] >= bad_match['score'] * bad_match[
+                    'supports'] else 0
 
     @staticmethod
     def lists_sim_enough(l1, l2, nlp, threshold=0.8):
@@ -315,11 +338,12 @@ class MentionPattern(object):
                     return 1
         return 0
 
+
 _nlp_lg = None
+
 
 def get_nlp_lg():
     global _nlp_lg
     if _nlp_lg is None:
         _nlp_lg = spacy.load('en_core_web_lg')
     return _nlp_lg
-

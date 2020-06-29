@@ -1,5 +1,5 @@
 import utils
-from nlp_to_phenome import SemEHRAnnDoc, BasicAnn
+from annotation_docs import SemEHRAnnDoc, BasicAnn
 import logging
 from os.path import basename, isfile, join, split
 from os import listdir, remove
