@@ -1,4 +1,4 @@
-from os import listdir
+from os import listdir, rename
 from os.path import isfile, join, split
 import queue as Queue
 import threading
@@ -118,9 +118,9 @@ def save_json_array(lst, file_path, encoding='utf-8'):
         json.dump(lst, wf)
 
 
-def save_string(str, file_path, encoding='utf-8'):
+def save_string(txt, file_path, encoding='utf-8'):
     with codecs.open(file_path, 'w', encoding=encoding) as wf:
-        wf.write(str)
+        wf.write(txt)
 
 
 def load_json_data(file_path):
@@ -191,7 +191,10 @@ def read_text_file_as_string(file_path, encoding='utf-8'):
 
 
 def main():
-    pass
+    ann_dir = '/data/annotated_data/gold/'
+    files = [f for f in listdir(ann_dir) if isfile(join(ann_dir, f))]
+    for f in files:
+        rename(join(ann_dir, f), join(ann_dir, f[:-14] + '.txt.knowtator.xml'))
 
 if __name__ == "__main__":
     main()
