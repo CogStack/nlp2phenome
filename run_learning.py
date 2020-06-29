@@ -61,10 +61,10 @@ def reset_folder(working_folder):
 
 
 def run_it():
-    corpus_folder = 'S:/NLP/UKSerp_NLP'
-    gold_folder = 'P:/wuh/SemEHR-working/outputs_it2/gold_stand_results'
-    semehr_folder = 'P:/wuh/SemEHR-working/outputs/semehr_results'
-    working_folder = 'P:/wuh/SemEHR-working/learning_folder'
+    corpus_folder = '/data/annotated_data/corpus'
+    gold_folder = '/data/annotated_data/gold'
+    semehr_folder = '/data/semehr_results'
+    working_folder = '/data/learning'
     run_kfold_learning(10, corpus_folder, semehr_folder, gold_folder, working_folder)
     
 
