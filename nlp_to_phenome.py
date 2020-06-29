@@ -172,35 +172,10 @@ def learn_prediction_model(label, ann_dir=None, gold_dir=None, model_file=None, 
                 lm.add_rare_label(lbl, n_true * 1.0 / len(X))
                 continue
             # ignore_mappings += data['bad_labels']
-            lm.random_forest_learning(X, Y, output_file=ml_model_file_ptn % escape_lable_to_filename(lbl))
+            PhenomeLearners.random_forest_learning(X, Y, output_file=ml_model_file_ptn % escape_lable_to_filename(lbl))
             # lm.svm_learning(X, Y, output_file=ml_model_file_ptn % escape_lable_to_filename(lbl))
             # lm.gaussian_nb(X, Y, output_file=ml_model_file_ptn % escape_lable_to_filename(lbl))
             logging.debug('%s, #insts: %s, #tps: %s' % (lbl, len(X), n_true))
-            # if len(Y) > 20 and (.1< n_true * 1.0 / len(Y) < .9):
-            #     correct_X = []
-            #     incorrect_X = []
-            #     correct_Y = []
-            #     incorrect_Y = []
-            #     for idx in xrange(len(Y)):
-            #         if Y[idx] == [1]:
-            #             correct_Y.append(Y[idx])
-            #             correct_X.append(X[idx])
-            #         else:
-            #             incorrect_Y.append(Y[idx])
-            #             incorrect_X.append(X[idx])
-            #     bc = BinaryClusterClassifier(lbl)
-            #     bc.cluster(correct_X, incorrect_X)
-            #     lm.put_binary_cluster_classifier(lbl, bc)
-            # LabelModel.cluster(correct_X, correct_Y)
-            # LabelModel.cluster(incorrect_X, incorrect_Y)
-            # logging.debug('doing KNN for %s' % lbl)
-            # LabelModel.knn_classify(X, Y, output_file=ml_model_file_ptn % lbl)
-            # lm.decision_tree_learning(X, Y, lm,
-            #                           output_file=ml_model_file_ptn % escape_lable_to_filename(lbl),
-            #                           pca_dim=pca_dim,
-            #                           pca_file=pca_model_file,
-            #                           # tree_viz_file=viz_file % escape_lable_to_filename(lbl),
-            #                           lbl=lbl)
 
     if model_dir is not None and model_changed:
         lm.serialise(join(model_dir, '%s.lm' % label))
@@ -360,17 +335,6 @@ def do_learn_exp(viz_file, num_dimensions=[20], ignore_context=False, separate_b
                           label_whitelist=_labels,
                           eHostGD=eHostGD, mention_pattern=mention_pattern)
         result_str = CustomisedRecoginiser.print_performances(results)
-    # conll_output = ''
-    # for id in id2conll:
-    #     doc_output = id2conll[id].conll_output
-    #     conll_output += doc_output + '\n'
-    #     logging.info('doc [%s]' % id)
-    #     logging.info(doc_output)
-    #
-    # logging.info('total processed %s docs' % len(id2conll))
-    # if conll_output_file is not None:
-    #     utils.save_string(conll_output, conll_output_file)
-    #     logging.info('conll_output saved to [%s]' % conll_output_file)
     return result_str
 
 
