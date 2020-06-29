@@ -2,7 +2,7 @@ import sklearn
 import datetime
 from os import listdir
 from os.path import isfile, join
-from nlp_to_phenome import EDIRDoc, EDIRAnn
+from nlp_to_phenome import EDIRDoc, EDIRAnn, SemEHRAnnDoc
 import reportreader as rr
 import re
 import utils
@@ -124,7 +124,7 @@ def read_ehost_annotated_result(folder, no_context=False):
     return id2label
 
 
-def get_what_is_changing(ann_folder, text_folder, output_file):
+def get_what_is_changing(ann_folder, text_folder, output_file, eHostAnnFile=True):
     """
     get what is getting better/worse
     :param ann_folder:
@@ -135,9 +135,17 @@ def get_what_is_changing(ann_folder, text_folder, output_file):
     nlp = rr.get_nlp_instance()
     files = [f for f in listdir(ann_folder) if isfile(join(ann_folder, f))]
     type2abstractions = {}
-    for f in files:
-        d = eHostAnnDoc(join(ann_folder, f))
-        anns = d.get_ess_entities(no_context=True)
+    for f in files:        
+        anns = []
+        text_file = join(text_folder, f[0:-14])
+        if eHostAnnFile:
+            d = eHostAnnDoc(join(ann_folder, f))
+            anns = d.get_ess_entities(no_context=True)
+        else:
+            d = eHostGenedDoc(join(ann_folder, f))
+            anns = d.get_ess_entities()
+        if len(anns) == 0:
+            logging.info('anns is empty for [{:s}]'.format(f))
         text = utils.read_text_file_as_string(join(text_folder, f[0:-14]), encoding='cp1252')
         sents = rr.get_sentences_as_anns(nlp, text)
         for ann in anns:
@@ -234,7 +242,7 @@ def generate_gold_stand_from_validation(generated_ann_folder, validated_ann_fold
         utils.save_string(ET.tostring(elem_annotations, encoding='utf8', method='xml'), join(gold_standard_folder, f))
 
 
-def analyse_trajectory_subjects(file):
+def analyse_trajectory_subjects(file, output_file):
     t2subs = utils.load_json_data(file)
     t2freq = {}
     for t in t2subs:
@@ -252,6 +260,7 @@ def analyse_trajectory_subjects(file):
         roots = sorted([(k, freqs['root'][k]) for k in freqs['root']], key=itemgetter(1), reverse=True)
         s += '***%s [roots]***\n%s\n\n' % (t, freq_to_str(roots))
     logging.info(s)
+    utils.save_string(s, output_file)
 
 
 def freq_to_str(freq):
@@ -265,6 +274,23 @@ def add_key_freq(d, key):
         d[key] = 1
 
 
+def summarise_validation_results(folder):
+    files = [f for f in listdir(folder) if isfile(join(folder, f))]
+    t2freq = {}
+    for f in files:
+        gen_doc = eHostGenedDoc(join(folder, f))
+        logging.debug('processing: %s / %s' % (folder, f))
+        for g in gen_doc.get_ess_entities():
+            logging.debug('validation label: %s' % g.type)
+            if g.type not in t2freq:
+                t2freq[g.type] = 0
+            t2freq[g.type] += 1
+    s = '\n'.join(['%s\t%s' % (t, t2freq[t]) for t in t2freq])
+    logging.info(s)
+    return s
+
+            
+
 if __name__ == "__main__":
     log_level = 'DEBUG'
     log_format = '[%(filename)s:%(lineno)d] %(name)s %(asctime)s %(message)s'
@@ -272,13 +298,14 @@ if __name__ == "__main__":
     # compute_iaa()
     # analysing_label_performance('S:/NLP/annotation_it02/annotation_Steven/iteration_02/saved', 
     #                             'P:/wuh/label2performce_steve.tsv')
-    generate_gold_stand_from_validation('P:/wuh/SemEHR-working/outputs_it2/nlp2phenome',
-                                        'S:/NLP/annotation_it02/annotation_Steven/iteration_02/saved',
-                                        'P:/wuh/SemEHR-working/outputs_it2/gold_stand_results')
-    # sub_json_file = '...train-trajectory-subjects.json'
-    # analyse_trajectory_subjects(sub_json_file)
+    # generate_gold_stand_from_validation('P:/wuh/SemEHR-working/outputs_it2/nlp2phenome',
+    #                                     'S:/NLP/annotation_it02/annotation_Steven/iteration_02/saved',
+    #                                     'P:/wuh/SemEHR-working/outputs_it2/gold_stand_results')
+    sub_json_file = './diabetes_subs.json'
+    analyse_trajectory_subjects(sub_json_file, './traject_sub_analysis_result.txt')
     # if len(sys.argv) != 4:
     #     print('the syntax is [python ann_utils.py ann_folder, text_folder, result_file]')
     # else:
     #     logging.info('working...')
-    #     get_what_is_changing(sys.argv[1], sys.argv[2], sys.argv[3])
+    #     get_what_is_changing(sys.argv[1], sys.argv[2], sys.argv[3], eHostAnnFile=False)
+    # summarise_validation_results('/data/val/it2')
