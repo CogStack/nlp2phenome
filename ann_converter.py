@@ -80,21 +80,30 @@ class AnnConverter(object):
         return ann2label
 
     @staticmethod
-    def convert_csv_annotations(csv_file, text_folder, ann_folder,
-                                id_pattern='%s-%s', ann_file_pattern='%s.knowtator.xml'):
+    def convert_csv_annotations(csv_file, text_folder, ann_folder, mapping_file, annotated_anns_file,
+                                id_pattern='%s-%s', ann_file_pattern='%s.txt.knowtator.xml'):
         with open(csv_file, newline='') as cf:
             reader = csv.DictReader(cf)
+            label2concepts = {}
+            d2annotated_anns = {}
             for r in reader:
+                d2annotated_anns[r['doc_id'] + ".txt"] = [{'s': r['start'], 'e': r['end']}]
                 if r['Skip Document'] != 'Yes':
-                    utils.save_string(r['text'], join(text_folder, r['doc_id']))
+                    utils.save_string(r['text'], join(text_folder, r['doc_id'] + ".txt"))
                     elem_annotations = ET.Element("annotations")
                     elem_annotations.set('textSource', r['doc_id'])
                     mention_id = id_pattern % (r['doc_id'], 0)
                     if r['Correct'] == 'Yes' and r['Negation'] == 'NOT Negated':
                         AnnConverter.create_elem_ann(elem_annotations, mention_id,
-                                                     r['_start'], r['_end'], r['string_orig'], r['cui'])
-                    xml = ET.tostring(elem_annotations, encoding='utf8', method='xml')
+                                                     r['start'], r['end'], r['string_orig'], r['icd10-ch'])
+                    xml = ET.tostring(elem_annotations, encoding='unicode', method='xml')
                     utils.save_string(xml, join(ann_folder, ann_file_pattern % r['doc_id']))
+                    if r['icd10-ch'] not in label2concepts:
+                        label2concepts[r['icd10-ch']] = []
+                    if r['cui'] not in label2concepts[r['icd10-ch']]:
+                        label2concepts[r['icd10-ch']].append(r['cui'])
+            utils.save_json_array(label2concepts, mapping_file)
+            utils.save_json_array(d2annotated_anns, annotated_anns_file)
 
     @staticmethod
     def populate_inter_annotator_results(ann_folder_1, ann_folder_2, output_file, missing_file,
@@ -122,6 +131,11 @@ if __name__ == "__main__":
     # AnnConverter.load_ann_file('S:/NLP/annotation_Steven/stroke_nlp/saved/Stroke_id_105.txt.knowtator.xml')
     # AnnConverter.populate_inter_annotator_results('S:/NLP/annotation_Kristiina/stroke_nlp/saved',
     # 'S:/NLP/annotation_Steven/stroke_nlp/saved', 'mismatched.tsv')
-    AnnConverter.populate_inter_annotator_results('S:/NLP/annotation_Steven/stroke_nlp/saved',
-                                                  'P:/wuh/SemEHR-working/outputs/nlp2phenome',
-                                                  'kristiina_corrections.tsv', 'steven_added.tsv')
+    # AnnConverter.populate_inter_annotator_results('S:/NLP/annotation_Steven/stroke_nlp/saved',
+    #                                               'P:/wuh/SemEHR-working/outputs/nlp2phenome',
+    #                                               'kristiina_corrections.tsv', 'steven_added.tsv')
+    ann_folder = '/data/annotated_data/'
+    ann_files = [f for f in listdir(ann_folder) if isfile(join(ann_folder, f))]
+    for f in ann_files:
+        print('processing %s...' % f)
+        AnnConverter.convert_csv_annotations(join(ann_folder, f), join(ann_folder, 'corpus'), join(ann_folder, 'gold'), join(ann_folder, 'concept_mapping.json'), join(ann_folder, 'annotated_anns.json'))
