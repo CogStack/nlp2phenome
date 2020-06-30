@@ -85,6 +85,7 @@ def do_one_doc(doc_id, model_factory, mention_pattern, db_pool, sql_text_ptn, sq
         logging.info('%s anns not found' % doc_id)
         return
     doc_anns = json.loads(container[0]['anns'])
+    patient_id = container[0]['patient_id']
     du.query_data(sql_text_ptn.format(**doc_id), pool=db_pool, container=container)
     if len(container) == 0:
         logging.info('%s text not found' % doc_id)
@@ -93,6 +94,7 @@ def do_one_doc(doc_id, model_factory, mention_pattern, db_pool, sql_text_ptn, sq
     p2count = predict_doc_phenotypes(str(doc_id), doc_anns, text, model_factory, mention_pattern=mention_pattern)
     save_dict = doc_id.copy()
     save_dict['result'] = json.dumps(p2count)
+    save_dict['patient_id'] = patient_id
     du.query_data(save_result_sql_ptn.format(**save_dict), container=None, pool=db_pool)
     du.query_data(update_doc_sql_ptn.format(**doc_id), container=None, pool=db_pool)
     logging.info('%s done' % doc_id)
