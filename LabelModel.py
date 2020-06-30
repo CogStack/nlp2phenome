@@ -341,6 +341,21 @@ class LabelModel(object):
 
     def load_data(self, ann_dir, gold_dir, verbose=True, ignore_mappings=[], ignore_context=False,
                   separate_by_label=False, ful_text_dir=None, eHostGD=False, annotated_anns={}):
+        """
+
+        :param ann_dir:
+        :param gold_dir:
+        :param verbose:
+        :param ignore_mappings:
+        :param ignore_context:
+        :param separate_by_label:
+        :param ful_text_dir:
+        :param eHostGD:
+        :param annotated_anns: NB: this is for labelling settings where only partial data is annotated on
+        the documents. Therefore, we need to filter out those not assessed by the annotators to avoid kill some
+        true positives (those are correct but not assessed by annotators)
+        :return:
+        """
         if ignore_context:
             logging.info('doing learning without considering contextual info')
         # print self.get_top_tfidf_dimensions(self.max_dimensions)
