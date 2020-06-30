@@ -80,19 +80,21 @@ def predict_doc_phenotypes(doc_key, doc_anns, doc_text, model_factory, ignore_ma
 def do_one_doc(doc_id, model_factory, mention_pattern, db_pool, sql_text_ptn, sql_ann_ptn, save_result_sql_ptn,
                update_doc_sql_ptn):
     container = []
-    du.query_data(sql_ann_ptn % doc_id, pool=db_pool, container=container)
+    du.query_data(sql_ann_ptn.format(**doc_id), pool=db_pool, container=container)
     if len(container) == 0:
         logging.info('%s anns not found' % doc_id)
         return
-    doc_anns = json.loads(container[0])
-    du.query_data(sql_text_ptn % doc_id, pool=db_pool, container=container)
+    doc_anns = json.loads(container[0]['anns'])
+    du.query_data(sql_text_ptn.format(**doc_id), pool=db_pool, container=container)
     if len(container) == 0:
         logging.info('%s text not found' % doc_id)
         return
     text = container[0]
-    p2count = predict_doc_phenotypes(doc_id, doc_anns, text, model_factory, mention_pattern=mention_pattern)
-    du.query_data(save_result_sql_ptn % (doc_id, json.dumps(p2count)), container=None, pool=db_pool)
-    du.query_data(update_doc_sql_ptn % doc_id, container=None, pool=db_pool)
+    p2count = predict_doc_phenotypes(str(doc_id), doc_anns, text, model_factory, mention_pattern=mention_pattern)
+    save_dict = doc_id.copy()
+    save_dict['result'] = json.dumps(p2count)
+    du.query_data(save_result_sql_ptn.format(**save_dict), container=None, pool=db_pool)
+    du.query_data(update_doc_sql_ptn.format(**doc_id), container=None, pool=db_pool)
     logging.info('%s done' % doc_id)
 
 
