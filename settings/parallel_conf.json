@@ -1,0 +1,16 @@
+{
+  "dbconf": {
+    "server": "",
+    "user": "",
+    "password": "",
+    "database": ""
+  },
+  "concept_mapping_file": "",
+  "pattern_folder": "",
+  "phenotypes": [],
+  "model_dir": "",
+  "sql_docs4process": "",
+  "sql_text_ptn": "",
+  "sql_ann_ptn": "",
+  "save_result_sql_ptn": ""
+}
