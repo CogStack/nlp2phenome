@@ -6,7 +6,6 @@ from EDI_ann_doc import EDIRDoc, eHostGenedDoc
 import joblib as jl
 
 
-
 class LabelModel(object):
     """
     a machine learning based class for inferring phenotypes from NLP results
@@ -421,7 +420,7 @@ class LabelModel(object):
                                                         for a in context_anns), fk))
 
                 lbl = LabelModel.get_label_specific_data(self, lbl2data, a, context_anns, fk, cr,
-                                                         separate_by_label=False)
+                                                         separate_by_label=separate_by_label)
 
                 lbl2data[lbl]['multiple_tps'] += multiple_true_positives
                 ql = lbl
