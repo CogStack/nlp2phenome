@@ -77,7 +77,8 @@ def predict_doc_phenotypes(doc_key, doc_anns, doc_text, model_factory, ignore_ma
     return p2count
 
 
-def do_one_doc(doc_id, model_factory, mention_pattern, db_pool, sql_text_ptn, sql_ann_ptn, save_result_sql_ptn):
+def do_one_doc(doc_id, model_factory, mention_pattern, db_pool, sql_text_ptn, sql_ann_ptn, save_result_sql_ptn,
+               update_doc_sql_ptn):
     container = []
     du.query_data(sql_ann_ptn % doc_id, pool=db_pool, container=container)
     if len(container) == 0:
@@ -90,7 +91,8 @@ def do_one_doc(doc_id, model_factory, mention_pattern, db_pool, sql_text_ptn, sq
         return
     text = container[0]
     p2count = predict_doc_phenotypes(doc_id, doc_anns, text, model_factory, mention_pattern=mention_pattern)
-    du.query_data(save_result_sql_ptn % (doc_id, json.dumps(p2count)), pool=db_pool)
+    du.query_data(save_result_sql_ptn % (doc_id, json.dumps(p2count)), container=None, pool=db_pool)
+    du.query_data(update_doc_sql_ptn % doc_id, container=None, pool=db_pool)
     logging.info('%s done' % doc_id)
 
 
@@ -102,9 +104,10 @@ def run_parallel_prediction(settings):
     doc_ids = []
     model_factory = ModelFactory(settings['phenotypes'], settings['model_dir'])
     du.query_data(settings['sql_docs4process'], pool=db_pool, container=doc_ids)
-    utils.multi_thread_tasking(doc_ids, num_threads=settings['num_threads'],
+    utils.multi_thread_tasking(doc_ids, num_threads=settings['num_threads'], process_func=do_one_doc,
                                args=[model_factory, mp_inst, db_pool,
                                      settings['sql_text_ptn'],
                                      settings['sql_ann_ptn'],
-                                     settings['save_result_sql_ptn']])
-    logging.info('#docs: %s all done'% len(doc_ids))
+                                     settings['save_result_sql_ptn'],
+                                     settings['update_doc_sql_ptn']])
+    logging.info('#docs: %s all done' % len(doc_ids))

@@ -12,5 +12,6 @@
   "sql_docs4process": "",
   "sql_text_ptn": "",
   "sql_ann_ptn": "",
-  "save_result_sql_ptn": ""
+  "save_result_sql_ptn": "",
+  "update_doc_sql_ptn": ""
 }
