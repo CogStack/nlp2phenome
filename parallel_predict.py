@@ -46,7 +46,8 @@ class ModelFactory(object):
         return self._phenotypes
 
 
-def predict_doc_phenotypes(doc_key, doc_anns, doc_text, model_factory, ignore_mappings=[], mention_pattern=None):
+def predict_doc_phenotypes(doc_key, doc_anns, doc_text, model_factory, concept_mapping,
+                           ignore_mappings=[], mention_pattern=None):
     """
     load a document and do all phenotype predictions in one go
     this is designed for large amounts of documents to be loaded, for example, from databases
@@ -54,11 +55,12 @@ def predict_doc_phenotypes(doc_key, doc_anns, doc_text, model_factory, ignore_ma
     :param doc_anns:
     :param doc_text:
     :param model_factory:
+    :param concept_mapping:
     :param ignore_mappings:
     :param mention_pattern:
     :return:
     """
-    cr = CustomisedRecoginiser(doc_key, ann_doc=doc_anns)
+    cr = CustomisedRecoginiser(doc_key, concept_mapping=concept_mapping, ann_doc=doc_anns)
     cr.full_text = doc_text
     p2count = {}
     for p in model_factory:
@@ -77,7 +79,8 @@ def predict_doc_phenotypes(doc_key, doc_anns, doc_text, model_factory, ignore_ma
     return p2count
 
 
-def do_one_doc(doc_id, model_factory, mention_pattern, db_pool, sql_text_ptn, sql_ann_ptn, save_result_sql_ptn,
+def do_one_doc(doc_id, model_factory, concept_mapping, mention_pattern,
+               db_pool, sql_text_ptn, sql_ann_ptn, save_result_sql_ptn,
                update_doc_sql_ptn):
     container = []
     du.query_data(sql_ann_ptn.format(**doc_id), pool=db_pool, container=container)
@@ -91,7 +94,8 @@ def do_one_doc(doc_id, model_factory, mention_pattern, db_pool, sql_text_ptn, sq
         logging.info('%s text not found' % doc_id)
         return
     text = container[0]
-    p2count = predict_doc_phenotypes(str(doc_id), doc_anns, text, model_factory, mention_pattern=mention_pattern)
+    p2count = predict_doc_phenotypes(str(doc_id), doc_anns, text, model_factory, concept_mapping,
+                                     mention_pattern=mention_pattern)
     save_dict = doc_id.copy()
     save_dict['result'] = json.dumps(p2count)
     save_dict['patient_id'] = patient_id
@@ -109,7 +113,7 @@ def run_parallel_prediction(settings):
     model_factory = ModelFactory(settings['phenotypes'], settings['model_dir'])
     du.query_data(settings['sql_docs4process'], pool=db_pool, container=doc_ids)
     utils.multi_thread_tasking(doc_ids, num_threads=settings['num_threads'], process_func=do_one_doc,
-                               args=[model_factory, mp_inst, db_pool,
+                               args=[model_factory, cm_obj, mp_inst, db_pool,
                                      settings['sql_text_ptn'],
                                      settings['sql_ann_ptn'],
                                      settings['save_result_sql_ptn'],
