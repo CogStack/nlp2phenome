@@ -67,7 +67,7 @@ def release_db_connection(cnn_obj):
     #cnn_obj['cnxn'].disconnect()
 
 
-def query_data(query, container, dbconn, pool=None):
+def query_data(query, container=None, dbconn=None, pool=None):
     if pool is not None:
         cnn = pool.get_connection()
         conn_dic = {'cnxn': cnn, 'cursor': cnn.cursor()}
