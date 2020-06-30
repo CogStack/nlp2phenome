@@ -158,7 +158,8 @@ def learn_prediction_model(label, ann_dir=None, gold_dir=None, model_file=None, 
         # logging.info(bad_lables)
         bad_lables = []
         data = lm.load_data(ann_dir, gold_dir, ignore_mappings=bad_lables, ignore_context=ignore_context,
-                            separate_by_label=separate_by_label, ful_text_dir=full_text_dir, eHostGD=eHostGD)
+                            separate_by_label=separate_by_label, ful_text_dir=full_text_dir, eHostGD=eHostGD,
+                            annotated_anns=_annotated_anns)
         # if separate_by_label:
         for lbl in data['lbl2data']:
             X = data['lbl2data'][lbl]['X']
@@ -196,7 +197,8 @@ def predict_label(model_file, test_ann_dir, test_gold_dir, ml_model_file_ptn, pe
     lm = LabelModel.deserialise(model_file)
     lm.max_dimensions = max_dimension
     data = lm.load_data(test_ann_dir, test_gold_dir, ignore_mappings=ignore_mappings, ignore_context=ignore_context,
-                        separate_by_label=separate_by_label, verbose=False, ful_text_dir=full_text_dir, eHostGD=eHostGD)
+                        separate_by_label=separate_by_label, verbose=False, ful_text_dir=full_text_dir, eHostGD=eHostGD,
+                        annotated_anns=_annotated_anns)
 
     files = data['files']
     for d in files:
