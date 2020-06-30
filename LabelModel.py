@@ -423,6 +423,8 @@ class LabelModel(object):
                                                          separate_by_label=separate_by_label)
 
                 lbl2data[lbl]['multiple_tps'] += multiple_true_positives
+                Y = lbl2data[lbl]['Y']
+                Y.append([1 if matched else 0])
                 ql = lbl
                 if ql not in query_label_perform:
                     query_label_perform[ql] = {'c': 0, 'w': 0}
