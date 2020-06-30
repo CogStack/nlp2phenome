@@ -236,12 +236,13 @@ def predict_label(model_file, test_ann_dir, test_gold_dir, ml_model_file_ptn, pe
                 for idx in range(len(X)):
                     logging.debug(
                         '%s => %s' % (bc.classify(X[idx], complementary_classifiers=complementary_classifiers), Y[idx]))
-            lm.predict_use_model(X, Y, 0, mtp, ml_model_file_ptn % escape_lable_to_filename(lbl), performance,
-                                 pca_model_file=pca_model_file,
-                                 separate_performance=this_performance,
-                                 id2conll=id2conll, doc_anns=doc_anns, file_pattern=file_pattern,
-                                 doc_folder=test_gold_dir,
-                                 label_whitelist=label_whitelist, mp_predicted=mp_predicted)
+            PhenomeLearners.predict_use_model(X, Y, 0, mtp, ml_model_file_ptn % escape_lable_to_filename(lbl),
+                                              performance,
+                                              pca_model_file=pca_model_file,
+                                              separate_performance=this_performance,
+                                              id2conll=id2conll, doc_anns=doc_anns, file_pattern=file_pattern,
+                                              doc_folder=test_gold_dir,
+                                              label_whitelist=label_whitelist, mp_predicted=mp_predicted)
         lbl2performances[lbl] = this_performance
     perform_str = CustomisedRecoginiser.print_performances(lbl2performances)
     logging.debug('missed instances: %s' % data['fns'])
