@@ -115,3 +115,8 @@ def run_parallel_prediction(settings):
                                      settings['save_result_sql_ptn'],
                                      settings['update_doc_sql_ptn']])
     logging.info('#docs: %s all done' % len(doc_ids))
+
+
+if __name__ == "__main__":
+    config = './conf/parallel_config.json'
+    run_parallel_prediction(utils.load_json_data(config))
