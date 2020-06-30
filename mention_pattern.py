@@ -201,7 +201,7 @@ class MentionPattern(object):
         for da in doc_anns:
             d = 'se_ann_%s.json' % da['d']
             if d != cur_d:
-                cur_sents = get_sent_func(d)
+                cur_sents = get_sent_func(join(self._ann_folder, d))
                 cur_d = d
             a = da['ann']
             ch = self._cui2icd[a.cui]
