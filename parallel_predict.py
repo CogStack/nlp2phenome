@@ -81,9 +81,22 @@ def predict_doc_phenotypes(doc_key, doc_anns, doc_text, model_factory, concept_m
         label_model_predict(lm, model_factory.model_file_pattern(p), lbl2data, doc2predicted,
                             mention_pattern=mention_pattern, mention_prediction_param=cr)
         if doc_key in doc2predicted:
-            p2count[p] = len(doc2predicted[doc_key])
+            p2count[p] = {'freq': len(doc2predicted[doc_key]),
+                          'cui2freq': collect_phenotype_concept(doc2predicted[doc_key])}
             total += 1
     return p2count if total > 0 else None
+
+
+def collect_phenotype_concept(labelled_anns):
+    cui2freq = {}
+    for la in labelled_anns:
+        ann = la['ann']
+        cui = ann.cui
+        if cui not in cui2freq:
+            cui2freq[cui] = {'pref': cui.pref, 'freq':1}
+        else:
+            cui2freq[cui]['freq'] += 1
+    return cui2freq
 
 
 def do_one_doc(doc_id, model_factory, concept_mapping, mention_pattern,
@@ -193,8 +206,8 @@ if __name__ == "__main__":
     logging.basicConfig(level='DEBUG', format=log_format)
     log_file = './settings/learning_process.log'
     logging.basicConfig(level=log_level, format=log_format, filename=log_file, filemode='w')
-    # config = './settings/parallel_config.json'
-    # run_parallel_prediction(utils.load_json_data(config))
-    settings = utils.load_json_data('./settings/collect_morbidity.json')
-    collect_patient_morbidity_result(settings['phenotypes'], settings['sql_result'],
-                                     settings['db_conf'], settings['output_file'])
+    config = './settings/parallel_config.json'
+    run_parallel_prediction(utils.load_json_data(config))
+    # settings = utils.load_json_data('./settings/collect_morbidity.json')
+    # collect_patient_morbidity_result(settings['phenotypes'], settings['sql_result'],
+    #                                  settings['db_conf'], settings['output_file'])
