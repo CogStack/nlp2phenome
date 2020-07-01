@@ -157,7 +157,7 @@ def add_data_row(data, patient, cur_row, phenotypes):
     if 'patient_id' not in data:
         data['patient_id'] = []
     data['patient_id'].append(patient)
-    for p in data:
+    for p in phenotypes:
         if p not in data:
             data[p] = []
         data[p].append(cur_row[p])
@@ -171,12 +171,12 @@ def collect_patient_morbidity_result(phenotypes, sql_result, db_conf, output_fil
     du.query_data(sql_result, pool=db_pool, container=container)
     data = {}
     cur_p = None
-    cur_row = initial_morbidity_row()
+    cur_row = initial_morbidity_row(phenotypes)
     for d in container:
         if d['patient_id'] != cur_p:
             add_data_row(data, cur_p, cur_row, phenotypes)
             cur_p = d['patient_id']
-            cur_row = initial_morbidity_row()
+            cur_row = initial_morbidity_row(phenotypes)
             logging.info('working on [%s]...' % cur_p)
         doc_result = json.loads(d['result'])
         for p in doc_result:
