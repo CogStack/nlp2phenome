@@ -7,6 +7,7 @@ import mention_pattern as mp
 import sqldbutils as du
 import utils
 import json
+import pandas as pd
 
 
 class ModelFactory(object):
@@ -47,7 +48,6 @@ class ModelFactory(object):
 
     def model_file_pattern(self, phenotype):
         return self._learning_model_dir + '/' + phenotype + '_%s_DT.model'
-    
 
 
 def predict_doc_phenotypes(doc_key, doc_anns, doc_text, model_factory, concept_mapping,
@@ -80,7 +80,7 @@ def predict_doc_phenotypes(doc_key, doc_anns, doc_text, model_factory, concept_m
         doc2predicted = {}
         label_model_predict(lm, model_factory.model_file_pattern(p), lbl2data, doc2predicted,
                             mention_pattern=mention_pattern, mention_prediction_param=cr)
-        if doc_key in doc2predicted: 
+        if doc_key in doc2predicted:
             p2count[p] = len(doc2predicted[doc_key])
             total += 1
     return p2count if total > 0 else None
@@ -107,7 +107,7 @@ def do_one_doc(doc_id, model_factory, concept_mapping, mention_pattern,
 
     p2count = predict_doc_phenotypes(str(doc_id), doc_anns, text, model_factory, concept_mapping,
                                      mention_pattern=mention_pattern)
-    
+
     if p2count is not None:
         save_dict = doc_id.copy()
         save_dict['result'] = json.dumps(p2count)
@@ -116,7 +116,7 @@ def do_one_doc(doc_id, model_factory, concept_mapping, mention_pattern,
         du.query_data(update_doc_sql_ptn.format(**doc_id), container=None, pool=db_pool)
     else:
         du.query_data(update_doc_sql_ptn.format(**doc_id), container=None, pool=db_pool)
-        logging.info('%s empty phenotypes' % doc_id)        
+        logging.info('%s empty phenotypes' % doc_id)
     logging.info('%s done' % doc_id)
 
 
@@ -144,11 +144,57 @@ def run_parallel_prediction(settings):
     logging.info('#docs: %s all done' % len(doc_ids))
 
 
+def initial_morbidity_row(phenotypes):
+    r = {}
+    for p in phenotypes:
+        r[p] = 0
+    return r
+
+
+def add_data_row(data, patient, cur_row, phenotypes):
+    if patient is None:
+        return
+    if 'patient_id' not in data:
+        data['patient_id'] = []
+    data['patient_id'].append(patient)
+    for p in data:
+        if p not in data:
+            data[p] = []
+        data[p].append(cur_row[p])
+
+
+def collect_patient_morbidity_result(phenotypes, sql_result, db_conf, output_file):
+    columns = ['patient_id'] + phenotypes
+    # 1. query all results, assuming the result size is not too BIG (<1m) and ordered by patient_id
+    db_pool = du.get_mysql_pooling(db_conf, num=10)
+    container = []
+    du.query_data(sql_result, pool=db_pool, container=container)
+    data = {}
+    cur_p = None
+    cur_row = initial_morbidity_row()
+    for d in container:
+        if d['patient_id'] != cur_p:
+            add_data_row(data, cur_p, cur_row, phenotypes)
+            cur_p = d['patient_id']
+            cur_row = initial_morbidity_row()
+            logging.info('working on [%s]...' % cur_p)
+        doc_result = json.loads(d['result'])
+        for p in doc_result:
+            cur_row[p] += doc_result[p]
+    add_data_row(data, cur_p, cur_row, phenotypes)
+    df = pd.DataFrame(data)
+    df.to_csv(output_file, index=False)
+    logging.info('data saved to %s' % output_file)
+
+
 if __name__ == "__main__":
     log_level = 'DEBUG'
     log_format = '[%(filename)s:%(lineno)d] %(name)s %(asctime)s %(message)s'
     logging.basicConfig(level='DEBUG', format=log_format)
     log_file = './settings/learning_process.log'
     logging.basicConfig(level=log_level, format=log_format, filename=log_file, filemode='w')
-    config = './settings/parallel_config.json'
-    run_parallel_prediction(utils.load_json_data(config))
+    # config = './settings/parallel_config.json'
+    # run_parallel_prediction(utils.load_json_data(config))
+    settings = utils.load_json_data('./settings/collect_morbidity.json')
+    collect_patient_morbidity_result(settings['phenotypes'], settings['sql_result'],
+                                     settings['db_conf'], settings['output_file'])
