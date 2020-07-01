@@ -1,6 +1,6 @@
 from annotation_docs import CustomisedRecoginiser, Concept2Mapping
 import logging
-from os.path import exists
+from os.path import exists, join
 from LabelModel import LabelModel
 from predict_helper import label_model_predict
 import mention_pattern as mp
@@ -164,7 +164,27 @@ def initial_morbidity_row(phenotypes):
     return r
 
 
-def add_data_row(data, patient, cur_row, phenotypes):
+def initial_phenotype_details(phenotypes):
+    r = {}
+    for p in phenotypes:
+        r[p] = {}
+    return r
+
+
+def add_phenotype_detail(phe_detial, phenotype, cui2freq, p2subtypes):
+    detail = phe_detial[phenotype]
+    if phenotype not in p2subtypes:
+        p2subtypes[phenotype] = set()
+    for cui in cui2freq:
+        lbl = '%s (%s)' % (cui2freq[cui]['pref'], cui)
+        if lbl not in detail:
+            detail[lbl] = cui2freq[cui]['freq']
+        else:
+            detail[lbl] += cui2freq[cui]['freq']
+        p2subtypes[phenotype].add(lbl)
+
+
+def add_data_row(data, patient, cur_row, phenotypes, phenotype2data, cur_phenotype_detail):
     if patient is None:
         return
     if 'patient_id' not in data:
@@ -174,30 +194,61 @@ def add_data_row(data, patient, cur_row, phenotypes):
         if p not in data:
             data[p] = []
         data[p].append(cur_row[p])
+    for p in cur_phenotype_detail:
+        cur_phenotype_detail[p]['patient_id'] = patient
+        phenotype2data[p].append(cur_phenotype_detail[p])
 
 
-def collect_patient_morbidity_result(phenotypes, sql_result, db_conf, output_file):
+def populate_subtype_output(subtype_list, phenotype_data, output_file):
+    data = {}
+    for c in ['patient_id'] + subtype_list:
+        data[c] = []
+    for rd in phenotype_data:
+        data['patient_id'] = rd['patient_id']
+        for st in subtype_list:
+            if st not in rd:
+                data[st].append(0)
+            else:
+                data[st].append(rd[st])
+    df = pd.DataFrame(data)
+    df.to_csv(output_file, index=False)
+    logging.info('subtypes saved to %s' % output_file)
+
+
+def collect_patient_morbidity_result(phenotypes, sql_result, db_conf, output_folder):
     columns = ['patient_id'] + phenotypes
     # 1. query all results, assuming the result size is not too BIG (<1m) and ordered by patient_id
     db_pool = du.get_mysql_pooling(db_conf, num=10)
     container = []
     du.query_data(sql_result, pool=db_pool, container=container)
     data = {}
+    phenotype2subtypes = {}
+    phenotype2data = {}
+    for phe in phenotypes:
+        phenotype2data[phe] = []
+
     cur_p = None
     cur_row = initial_morbidity_row(phenotypes)
+    cur_phenotype_detail = None
     for d in container:
         if d['patient_id'] != cur_p:
-            add_data_row(data, cur_p, cur_row, phenotypes)
+            add_data_row(data, cur_p, cur_row, phenotypes, phenotype2data, cur_phenotype_detail)
             cur_p = d['patient_id']
             cur_row = initial_morbidity_row(phenotypes)
+            cur_phenotype_detail = initial_phenotype_details(phenotypes)
             logging.info('working on [%s]...' % cur_p)
         doc_result = json.loads(d['result'])
         for p in doc_result:
-            cur_row[p] += doc_result[p]
-    add_data_row(data, cur_p, cur_row, phenotypes)
+            cur_row[p] += doc_result[p]['freq']
+            add_phenotype_detail(cur_phenotype_detail, p, doc_result[p]['cui2freq'], phenotype2subtypes)
+    add_data_row(data, cur_p, cur_row, phenotypes, phenotype2data, cur_phenotype_detail)
     df = pd.DataFrame(data)
+    output_file = join(output_folder, 'icd_chapter_results.csv')
     df.to_csv(output_file, index=False)
     logging.info('data saved to %s' % output_file)
+
+    for p in phenotypes:
+        populate_subtype_output(phenotype2subtypes[p], phenotype2data[p], join(output_folder, '%s.csv' % p))
 
 
 if __name__ == "__main__":
