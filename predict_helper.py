@@ -55,7 +55,6 @@ def label_model_predict(lm, model_file_pattern, lbl2data, doc2predicted,
         if mention_pattern is not None:
             mp_predicted = mention_pattern.predict(lbl2data[lbl]['doc_anns'], cr=mention_prediction_param)
         X = lbl2data[lbl]['X']
-        logging.debug(X)
         doc_anns = lbl2data[lbl]['doc_anns']
         if lbl in lm.rare_labels:
             logging.info('%s to be predicted using %s' % (lbl, lm.rare_labels[lbl]))
@@ -67,11 +66,11 @@ def label_model_predict(lm, model_file_pattern, lbl2data, doc2predicted,
         else:
             if len(X) > 0:
                 logging.debug('%s, dimensions %s' % (lbl, len(X[0])))
-            lm.predict_use_model_in_action(X, model_file=model_file_pattern % escape_lable_to_filename(lbl),
-                                           pca_model_file=None,
-                                           doc2predicted=doc2predicted,
-                                           doc_anns=doc_anns,
-                                           mp_predicted=mp_predicted)
+            PhenomeLearners.predict_use_model_in_action(X, model_file=model_file_pattern % escape_lable_to_filename(lbl),
+                                                        pca_model_file=None,
+                                                        doc2predicted=doc2predicted,
+                                                        doc_anns=doc_anns,
+                                                        mp_predicted=mp_predicted)
 
 
 def hybrid_prediciton(settings):

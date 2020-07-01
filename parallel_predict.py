@@ -20,7 +20,7 @@ class ModelFactory(object):
 
     def load_models(self):
         for phenotype in self._phenotypes:
-            logging.info('working on [%s]' % phenotype)
+            logging.info('loading on [%s]' % phenotype)
             _learning_model_file = self._learning_model_dir + '/%s.lm' % phenotype
 
             if not exists(_learning_model_file):
@@ -45,6 +45,10 @@ class ModelFactory(object):
     def phenotypes(self):
         return self._phenotypes
 
+    def model_file_pattern(self, phenotype):
+        return self._learning_model_dir + '/' + phenotype + '_%s_DT.model'
+    
+
 
 def predict_doc_phenotypes(doc_key, doc_anns, doc_text, model_factory, concept_mapping,
                            ignore_mappings=[], mention_pattern=None):
@@ -63,7 +67,8 @@ def predict_doc_phenotypes(doc_key, doc_anns, doc_text, model_factory, concept_m
     cr = CustomisedRecoginiser(doc_key, concept_mapping=concept_mapping, ann_doc=doc_anns)
     cr.full_text = doc_text
     p2count = {}
-    for p in model_factory:
+    total = 0
+    for p in model_factory.phenotypes:
         lm = model_factory.get_model_by_phenotype(p)
         if lm is None:
             logging.info('phenotype %s not found' % p)
@@ -73,10 +78,12 @@ def predict_doc_phenotypes(doc_key, doc_anns, doc_text, model_factory, concept_m
                                     ignore_mappings=ignore_mappings, ignore_context=True,
                                     separate_by_label=True)
         doc2predicted = {}
-        label_model_predict(lm, model_factory.get_model_by_phenotype(p), lbl2data, doc2predicted,
+        label_model_predict(lm, model_factory.model_file_pattern(p), lbl2data, doc2predicted,
                             mention_pattern=mention_pattern, mention_prediction_param=cr)
-        p2count[p] = len(doc2predicted[doc_key])
-    return p2count
+        if doc_key in doc2predicted: 
+            p2count[p] = len(doc2predicted[doc_key])
+            total += 1
+    return p2count if total > 0 else None
 
 
 def do_one_doc(doc_id, model_factory, concept_mapping, mention_pattern,
@@ -89,18 +96,27 @@ def do_one_doc(doc_id, model_factory, concept_mapping, mention_pattern,
         return
     doc_anns = json.loads(container[0]['anns'])
     patient_id = container[0]['patient_id']
+
+    container = []
     du.query_data(sql_text_ptn.format(**doc_id), pool=db_pool, container=container)
     if len(container) == 0:
         logging.info('%s text not found' % doc_id)
         return
-    text = container[0]
+    text = container[0]['doc_content']
+    container = []
+
     p2count = predict_doc_phenotypes(str(doc_id), doc_anns, text, model_factory, concept_mapping,
                                      mention_pattern=mention_pattern)
-    save_dict = doc_id.copy()
-    save_dict['result'] = json.dumps(p2count)
-    save_dict['patient_id'] = patient_id
-    du.query_data(save_result_sql_ptn.format(**save_dict), container=None, pool=db_pool)
-    du.query_data(update_doc_sql_ptn.format(**doc_id), container=None, pool=db_pool)
+    
+    if p2count is not None:
+        save_dict = doc_id.copy()
+        save_dict['result'] = json.dumps(p2count)
+        save_dict['patient_id'] = patient_id
+        du.query_data(save_result_sql_ptn.format(**save_dict), container=None, pool=db_pool)
+        du.query_data(update_doc_sql_ptn.format(**doc_id), container=None, pool=db_pool)
+    else:
+        du.query_data(update_doc_sql_ptn.format(**doc_id), container=None, pool=db_pool)
+        logging.info('%s empty phenotypes' % doc_id)        
     logging.info('%s done' % doc_id)
 
 
@@ -108,10 +124,17 @@ def run_parallel_prediction(settings):
     cm_obj = Concept2Mapping(settings['concept_mapping_file'])
     mp_inst = mp.MentionPattern(settings['pattern_folder'],
                                 cm_obj.cui2label, in_action=True)
-    db_pool = du.get_mysql_pooling(settings['dbconf'], num=10)
+    mp_inst = None
+    db_pool = du.get_mysql_pooling(settings['dbconf'], num=30)
     doc_ids = []
     model_factory = ModelFactory(settings['phenotypes'], settings['model_dir'])
     du.query_data(settings['sql_docs4process'], pool=db_pool, container=doc_ids)
+    # for d in doc_ids:
+    #     do_one_doc(d, model_factory, cm_obj, mp_inst, db_pool,
+    #                                  settings['sql_text_ptn'],
+    #                                  settings['sql_ann_ptn'],
+    #                                  settings['save_result_sql_ptn'],
+    #                                  settings['update_doc_sql_ptn'])
     utils.multi_thread_tasking(doc_ids, num_threads=settings['num_threads'], process_func=do_one_doc,
                                args=[model_factory, cm_obj, mp_inst, db_pool,
                                      settings['sql_text_ptn'],
@@ -122,5 +145,10 @@ def run_parallel_prediction(settings):
 
 
 if __name__ == "__main__":
-    config = './conf/parallel_config.json'
+    log_level = 'DEBUG'
+    log_format = '[%(filename)s:%(lineno)d] %(name)s %(asctime)s %(message)s'
+    logging.basicConfig(level='DEBUG', format=log_format)
+    log_file = './settings/learning_process.log'
+    logging.basicConfig(level=log_level, format=log_format, filename=log_file, filemode='w')
+    config = './settings/parallel_config.json'
     run_parallel_prediction(utils.load_json_data(config))

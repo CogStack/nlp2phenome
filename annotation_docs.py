@@ -4,7 +4,7 @@ from os.path import basename, isfile, join
 import logging
 import re
 from learners import LabelPerformance
-import reportreader as rr
+# import reportreader as rr
 
 
 class BasicAnn(object):
