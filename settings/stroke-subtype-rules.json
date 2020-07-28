@@ -1,0 +1,69 @@
+[
+	{
+		"label": "primary haemorrhagic stroke",
+		"inclusions": [{"phenotype": "subarachnoid_haemorrhage"}],
+		"exclusion_units": [
+			[{"phenotype": "mening_tumour"}],
+			[{"phenotype": "metast_tumour"}],
+			[{"phenotype": "tumour"}],
+			[{"phenotype": "ischaemic_stroke"}],
+			[{"phenotype": "contusion"}],
+			[{"phenotype": "trauma"}],
+			[{"phenotype": "subdural_haematoma"}],
+			[{"phenotype": "transformation"}]
+		]
+	},
+
+	{
+		"label": "primary haemorrhagic stroke",
+		"inclusions": [{"phenotype": "intracerebral_haemorrhage"}],
+		"exclusion_units": [
+			[{"phenotype": "mening_tumour"}],
+			[{"phenotype": "metast_tumour"}],
+			[{"phenotype": "tumour"}],
+			[ {"phenotype": "ischaemic_stroke"}],
+			[{"phenotype": "contusion"}],
+			[{"phenotype": "trauma"}],
+			[{"phenotype": "subdural_haematoma"}],
+			[{"phenotype": "transformation"}]
+		]
+	},
+
+	{
+		"label": "subarachnoid haemorrhage",
+		"inclusions": [{"phenotype": "subarachnoid_haemorrhage"}],
+		"exclusion_units": [
+			[{"phenotype": "mening_tumour"}],
+			[{"phenotype": "metast_tumour"}],
+			[{"phenotype": "tumour"}],
+			[{"phenotype": "contusion"}],
+			[{"phenotype": "trauma"}],
+			[{"phenotype": "subdural_haematoma"}],
+			[{"phenotype": "transformation"}],
+			[{"phenotype": "intracerebral_haemorrhage"}]
+		]
+	},
+
+	{
+		"label": "intracerebra haemorrhage",
+		"inclusions": [{"phenotype": "intracerebral_haemorrhage"}],
+		"exclusion_units": [
+			[{"phenotype": "mening_tumour"}],
+			[{"phenotype": "metast_tumour"}],
+			[{"phenotype": "tumour"}],
+			[ {"phenotype": "ischaemic_stroke"}],
+			[{"phenotype": "contusion"}],
+			[{"phenotype": "trauma"}],
+			[{"phenotype": "subdural_haematoma"}],
+			[{"phenotype": "transformation"}],
+			[{"phenotype": "subarachnoid_haemorrhage"}, {"phenotype": "aneurysm"}]
+		]
+	},
+
+	{
+		"label": "ischaemic stroke",
+		"inclusions": [{"phenotype": "ischaemic_stroke"}],
+		"exclusion_units": [
+		]
+	}
+]
