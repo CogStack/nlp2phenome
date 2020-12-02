@@ -202,7 +202,7 @@ def doc_infer(settings):
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print('the syntax is [python semehr_processor.py PROCESS_SETTINGS_FILE_PATH]')
+        print('the syntax is [python doc_inference.py PROCESS_SETTINGS_FILE_PATH]')
     else:
         infer_settings = utils.load_json_data(sys.argv[1])
         doc_infer(infer_settings)
