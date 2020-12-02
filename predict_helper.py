@@ -150,7 +150,7 @@ def put_ann_label(lbl, pheAnn, doc2predicted, d):
 def output_eHOST_format(doc2precited, output_folder):
     for d in doc2precited:
         xml = AnnConverter.to_eHOST(d, doc2precited[d])
-        utils.save_string(xml, join(output_folder, '%s.txt.knowtator.xml' % d))
+        utils.save_string(str(xml), join(output_folder, '%s.txt.knowtator.xml' % d))
 
 
 def predict_to_eHOST_results(predict_setting):
