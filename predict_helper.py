@@ -8,6 +8,7 @@ from os.path import join
 from ann_converter import AnnConverter
 from os import listdir
 from os.path import isfile, exists
+import sys
 
 
 def predict(settings):
@@ -174,4 +175,7 @@ def predict_to_eHOST_results(predict_setting):
 if __name__ == "__main__":
     logging.basicConfig(level='DEBUG', format='[%(filename)s:%(lineno)d] %(name)s %(asctime)s %(message)s')
     # predict_to_eHOST_results('./settings/prediction_task_direct.json')
-    predict_to_eHOST_results('./settings/prediction_task_ukb_final.json')
+    if len(sys.argv) != 2:
+        print('the syntax is [python prediction_helper.py PROCESS_SETTINGS_FILE_PATH]')
+    else:
+        predict_to_eHOST_results(sys.argv[1])
