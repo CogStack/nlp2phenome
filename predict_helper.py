@@ -132,6 +132,8 @@ def direct_nlp_prediction(settings):
                 lbl = _cm_obj.concept2label[ann.cui][0]
                 pheAnn = PhenotypeAnn(ann.str, ann.start, ann.end, ann.negation, ann.temporality, ann.experiencer,
                                       'StudyName', lbl)
+                if ann.negation != 'Affirmed' or len(ann.ruled_by) > 0:
+                    continue
                 put_ann_label(lbl, pheAnn, doc2predicted, d)
         for ann in cr.phenotypes:
             put_ann_label(ann.minor_type, ann, doc2predicted, d)

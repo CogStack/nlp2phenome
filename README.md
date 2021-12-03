@@ -16,5 +16,28 @@ two datasets (radiology reports) collected in Scotland
 - [Edinburgh Stroke Study](http://www.dcn.ed.ac.uk/ess/) training data (364 reports), testing data (266 reports)
 - Tayside radiology reports (300 reports)
 
+## run learning 
+1. config your configuration file. Please see `./settings/sample_setting_kfold_learning.json` for reference.
+```javascript
+{
+  "kfold": 10, // the fold for learning
+  "corpus_folder": "/data/annotated_data/corpus", // the folder containing full text documents
+  "gold_folder": "/data/annotated_data/gold", // the folder containing the labelled/annotated data
+  "semehr_folder": "/data/semehr_results", // the folder containing baseline SemEHR results
+  "working_folder": "/data/learning", // the working folder to store intermidieate data files
+  "concept_mapping_file": "./settings/empty_concept_mapping.json", // the mapping file to map UMLS CUI to phenotypes
+  "learning_model_dir": "./models", // where the machine learning models are stored
+  "entity_types_file": "./settings/better_worse_entity_types.txt", // the list of phenotypes to be worked on
+  "ignore_mapping_file": "./settings/ignore_mapping.json", // a json based mapping file to ignore certain CUI mappings
+  "min_sample_size": 25, // minimal number of samples to train a model, if the sample size is less than this number, a counting based stats will be used to assess the correctness of baseline results rather than a machine learning model
+  "gold_file_pattern": "%s.txt.knowtator.xml", // the annotation file pattern, %s identifies the unique id that will be used to find SemEHR result file and full text file in respective folders
+  "eHostGD": true // whether use eHOST annotation, only other format supported is EDiR from Edinburgh Informatics 
+}
+```
+2. run it by
+```bash
+python run_learning.py YOUR_LEARNING_CONFIG_FILE
+```
+
 ## contact
 Dr Honghan Wu (honghan.wu@gmail.com)
