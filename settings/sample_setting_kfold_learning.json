@@ -1,0 +1,16 @@
+{
+  "kfold": 10,
+  "corpus_folder": "/data/annotated_data/corpus",
+  "gold_folder": "/data/annotated_data/gold",
+  "semehr_folder": "/data/semehr_results",
+  "working_folder": "/data/learning",
+  "concept_mapping_file": "./settings/concept_mapping_stroke_sample.json",
+  "learning_model_dir": "./models",
+  "entity_types_file": "./settings/entity_types_phenotypes_stroke_sample.txt",
+  "ignore_mapping_file": "./settings/ignore_mappings_stroke_sample.json",
+  "min_sample_size": 25,
+  "viz_file": "./settings/viz_%s.pdf",
+  "conll_output_file": "./settings/conll_output_file.txt",
+  "gold_file_pattern": "%s.txt.knowtator.xml",
+  "eHostGD": true
+}
