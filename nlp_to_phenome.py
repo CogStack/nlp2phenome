@@ -445,8 +445,8 @@ def run_learning(
     _eHostGD = settings['eHostGD'] if 'eHostGD' in settings else False
     _cm_obj = Concept2Mapping(_concept_mapping)
 
-    mp_inst = mp.MentionPattern(settings['pattern_folder'], _cm_obj.cui2label,
-                                csv_file=settings['csv_file'], ann_folder=_test_ann_dir)
+    # not using mention patterns for prediction as this is only a in-development feature
+    mp_inst = None
     return do_learn_exp(settings['viz_file'],
                         num_dimensions=[50],
                         ignore_context=settings['ignore_context'] if 'ignore_context' in settings else False,
