@@ -34,6 +34,9 @@ two datasets (radiology reports) collected in Scotland
   "eHostGD": true // whether use eHOST annotation, only other format supported is EDiR from Edinburgh Informatics 
 }
 ```
+- `entity_types_file` - each study is to identify a set of phenotypes (e.g., diseases, symptoms or other biomedical mentions). This file is a plain text file to list all the names of `phenotypes` in a format of one phenotype per line. Check [entity_types_phenotypes_stroke_sample.txt](./settings/entity_types_phenotypes_stroke_sample.txt) as an example.
+- `concept_mapping_file` - for each phenotype defined above, it needs to be mapped to one or several ontology concepts (e.g., UMLS CUI). This is a json file. It is a json dictionary, where the key is the `phenotype` name and the value is an array. Each element in the array takes the form of `CONPCET_ID\tLabel\tSemantic Type` - `tab` key separated tuple. The first component is most important and the last two are for display purpose only. Check [concept_mapping_stroke_sample.json](./settings/concept_mapping_stroke_sample.json) as an example.
+- `ignore_mapping_file` - this is a json dictionary for removing particular concepts (and customised dictionary terms) from the mappings of phenotypes as defined in `concept_mapping_file`. The key is `phenotype` name and the value is an array containing either concept IDs from the ontology used (e.g., UMLS) or the customised dictionary term. This file is only needed when the `concept_mapping_file` is automatically generated from some learning data and it requires some fine-tuning.
 2. run it by
 ```bash
 python run_learning.py YOUR_LEARNING_CONFIG_FILE
