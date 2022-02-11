@@ -12,7 +12,7 @@ mysql-connector-python==8.0.20
 numpy==1.19.0
 plac==1.2.0
 preshed==3.0.2
-protobuf==3.12.2
+protobuf==3.15.0
 pyodbc==4.0.30
 requests==2.24.0
 scikit-learn==0.23.1
