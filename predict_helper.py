@@ -34,10 +34,11 @@ def predict(settings):
         _ml_model_file_ptn = _learning_model_dir + '/' + phenotype + '_%s_DT.model'
 
         lm = LabelModel.deserialise(_learning_model_file)
+        # pass the concept2mapping object to the label model instance
+        lm.concept_mapping = _cm_obj
         lm.max_dimensions = 30
         data = lm.load_data_for_predict(
             ann_dir=ann_dir,
-            concept_mapping_file=_concept_mapping,
             ignore_mappings=ignore_mappings, ignore_context=True,
             separate_by_label=True,
             full_text_dir=test_text_dir)
