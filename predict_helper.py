@@ -165,7 +165,7 @@ def predict_to_eHOST_results(predict_setting):
         predicted_results = hybrid_prediciton(ss.settings)
     else:
         logging.info('predicting...')
-        predicted_results = predict(ss.settings)
+        predicted_results, _ = predict(ss.settings)
     output_eHOST_format(predicted_results, ss.settings['output_folder'])
     logging.info('results saved to %s' % ss.settings['output_folder'])
     if 'output_file' in ss.settings:
