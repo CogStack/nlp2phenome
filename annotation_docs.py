@@ -246,6 +246,18 @@ class SemEHRAnn(ContextedAnn):
     def pref(self, value):
         self._pref = value
 
+    def to_dict(self):
+        return {
+            'str': self.str,
+            'start': self.start,
+            'end': self.end,
+            'negation': self.negation,
+            'temporality': self.temporality,
+            'experiencer': self.experiencer,
+            'majorType': self.sty,
+            'minorType': self.sty
+        }
+
     @staticmethod
     def deserialise(jo):
         ann = SemEHRAnn(jo['str'], jo['start'], jo['end'], jo['negation'], jo['temporality'],
