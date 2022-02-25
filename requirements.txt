@@ -24,6 +24,6 @@ srsly==1.0.4
 thinc==7.4.3
 threadpoolctl==2.1.0
 tqdm==4.54.0
-urllib3==1.26.2
+urllib3==1.26.5
 wasabi==0.8.0
 zipp==3.4.0
