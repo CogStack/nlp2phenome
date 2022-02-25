@@ -17,6 +17,7 @@ class AnnConverter(object):
             str_context += ann.temporality + '_'
         if ann.experiencer != 'Patient':
             str_context += ann.experiencer + '_'
+        minor_type = ann.minor_type if hasattr(ann, 'minor_type') else ann.sty
         return '%s%s' % (str_context, ann.minor_type)
 
     @staticmethod
