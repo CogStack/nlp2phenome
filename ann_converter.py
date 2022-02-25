@@ -18,7 +18,7 @@ class AnnConverter(object):
         if ann.experiencer != 'Patient':
             str_context += ann.experiencer + '_'
         minor_type = ann.minor_type if hasattr(ann, 'minor_type') else ann.sty
-        return '%s%s' % (str_context, ann.minor_type)
+        return '%s%s' % (str_context, minor_type)
 
     @staticmethod
     def to_eHOST(doc_key, anns, file_pattern='%s.txt', id_pattern='smehr-%s-%s'):
