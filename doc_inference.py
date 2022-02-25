@@ -1,6 +1,7 @@
 import utils
 import re
 import json
+import sys
 
 
 class RuleConstruct(object):
@@ -161,12 +162,19 @@ def cal_performance(no_reports_pids, type2ids, doc_type2id, gd_labels, pred_labe
     print('false positive: %s' % false_positive)
 
 
-if __name__ == "__main__":
-    type2ids, all_pids = load_patient_truth('P:/wuh/SemEHR-working/patient_level_truth.tsv')
-    rules = PhenotypeRule.load_rules(
-        'P:/wuh/tools/semehr-tools/nlp2phenome_052019/nlp2phenome/settings/stroke_rules.json')
-    d2predicted = utils.load_json_data('P:/wuh/SemEHR-working/predict_results.json')
-    doc_labels_output = 'P:/wuh/SemEHR-working/doc_phenotype_result.tsv'
+def doc_infer_with_ground_truth(patient_level_tsv, pids, doc_type2id):
+    type2ids, all_pids = load_patient_truth(patient_level_tsv)
+    no_reports_pids = set(all_pids) - set(pids)
+    cal_performance(no_reports_pids, type2ids, doc_type2id, ['SAH', 'ICH'], 'primary haemorrhagic stroke')
+    cal_performance(no_reports_pids, type2ids, doc_type2id, ['SAH'], 'subarachnoid haemorrhage')
+    cal_performance(no_reports_pids, type2ids, doc_type2id, ['ICH'], 'intracerebra haemorrhage')
+    cal_performance(no_reports_pids, type2ids, doc_type2id, ['Ischaemic'], 'ischaemic stroke')
+
+
+def doc_infer(settings):
+    rules = PhenotypeRule.load_rules(settings['rule_file'])
+    d2predicted = utils.load_json_data(settings['doc_nlp_results'])
+    doc_labels_output = settings['doc_inference_output']
     s = ''
     doc_type2id = {}
     pids = []
@@ -185,11 +193,16 @@ if __name__ == "__main__":
                     doc_type2id[lp['label']] = []
                 doc_type2id[lp['label']].append(pid)
 
-    no_reports_pids = set(all_pids) - set(pids)
     pids = list(set(pids))
     print(json.dumps(pids))
-    cal_performance(no_reports_pids, type2ids, doc_type2id, ['SAH', 'ICH'], 'primary haemorrhagic stroke')
-    cal_performance(no_reports_pids, type2ids, doc_type2id, ['SAH'], 'subarachnoid haemorrhage')
-    cal_performance(no_reports_pids, type2ids, doc_type2id, ['ICH'], 'intracerebra haemorrhage')
-    cal_performance(no_reports_pids, type2ids, doc_type2id, ['Ischaemic'], 'ischaemic stroke')
     utils.save_string(s, doc_labels_output)
+    if 'patient_level_truth_tsv' in settings:
+        doc_infer_with_ground_truth(settings['patient_level_truth_tsv'], pids, doc_type2id)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print('the syntax is [python doc_inference.py PROCESS_SETTINGS_FILE_PATH]')
+    else:
+        infer_settings = utils.load_json_data(sys.argv[1])
+        doc_infer(infer_settings)

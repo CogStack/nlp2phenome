@@ -2,12 +2,12 @@ import sklearn
 import datetime
 from os import listdir
 from os.path import isfile, join
-from nlp_to_phenome import EDIRDoc, EDIRAnn, SemEHRAnnDoc
+from nlp_to_phenome import EDIRDoc
+from annotation_docs import EDIRAnn
 import reportreader as rr
 import re
 import utils
 import logging
-import sys
 from operator import itemgetter
 import xml.etree.ElementTree as ET
 

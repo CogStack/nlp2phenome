@@ -8,6 +8,7 @@ from os.path import join
 from ann_converter import AnnConverter
 from os import listdir
 from os.path import isfile, exists
+import sys
 
 
 def predict(settings):
@@ -33,10 +34,11 @@ def predict(settings):
         _ml_model_file_ptn = _learning_model_dir + '/' + phenotype + '_%s_DT.model'
 
         lm = LabelModel.deserialise(_learning_model_file)
+        # pass the concept2mapping object to the label model instance
+        lm.concept_mapping = _cm_obj
         lm.max_dimensions = 30
         data = lm.load_data_for_predict(
             ann_dir=ann_dir,
-            concept_mapping_file=_concept_mapping,
             ignore_mappings=ignore_mappings, ignore_context=True,
             separate_by_label=True,
             full_text_dir=test_text_dir)
@@ -131,6 +133,8 @@ def direct_nlp_prediction(settings):
                 lbl = _cm_obj.concept2label[ann.cui][0]
                 pheAnn = PhenotypeAnn(ann.str, ann.start, ann.end, ann.negation, ann.temporality, ann.experiencer,
                                       'StudyName', lbl)
+                if ann.negation != 'Affirmed' or len(ann.ruled_by) > 0:
+                    continue
                 put_ann_label(lbl, pheAnn, doc2predicted, d)
         for ann in cr.phenotypes:
             put_ann_label(ann.minor_type, ann, doc2predicted, d)
@@ -149,7 +153,7 @@ def put_ann_label(lbl, pheAnn, doc2predicted, d):
 def output_eHOST_format(doc2precited, output_folder):
     for d in doc2precited:
         xml = AnnConverter.to_eHOST(d, doc2precited[d])
-        utils.save_string(xml, join(output_folder, '%s.txt.knowtator.xml' % d))
+        utils.save_string(str(xml), join(output_folder, '%s.txt.knowtator.xml' % d))
 
 
 def predict_to_eHOST_results(predict_setting):
@@ -174,4 +178,7 @@ def predict_to_eHOST_results(predict_setting):
 if __name__ == "__main__":
     logging.basicConfig(level='DEBUG', format='[%(filename)s:%(lineno)d] %(name)s %(asctime)s %(message)s')
     # predict_to_eHOST_results('./settings/prediction_task_direct.json')
-    predict_to_eHOST_results('./settings/prediction_task_ukb_final.json')
+    if len(sys.argv) != 2:
+        print('the syntax is [python prediction_helper.py PROCESS_SETTINGS_FILE_PATH]')
+    else:
+        predict_to_eHOST_results(sys.argv[1])

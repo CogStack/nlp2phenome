@@ -1,8 +1,7 @@
-import utils
 from annotation_docs import SemEHRAnnDoc, BasicAnn
 import logging
-from os.path import basename, isfile, join, split
-from os import listdir, remove
+from os.path import isfile, join
+from os import listdir
 import spacy
 
 _spacy_nlp = None

@@ -1,0 +1,49 @@
+{
+  "stroke": [
+    "C0018944",
+    "haematoma",
+    "C4019010",
+    "C0005847"
+  ],
+  "microhaemorrhage": [
+    "C0019080"
+  ],
+  "atrophy": [
+    "C1114365",
+    "C0006104",
+    "C2700258"
+  ],
+  "subarachnoid_haemorrhage": [
+    "C0005767"
+  ],
+  "subdural_haematoma": [
+    "C0019080",
+    "C0038541",
+    "C0018944",
+    "haematoma",
+    "collections"
+  ],
+  "small_vessel_disease": [
+    "C1114365",
+    "C0006104",
+    "C0022116",
+    "C0682708",
+    "C0221198",
+    "C0228157",
+    "white matter"
+  ],
+  "tumour": [
+    "C0577559",
+    "C0221198",
+    "lesions",
+    "lesion",
+    "mass"
+  ],
+  "loc_deep":[
+    "brain",
+    "C0006104"
+  ],
+  "time_old":[
+    "C0332152"
+  ]
+}

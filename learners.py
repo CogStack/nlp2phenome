@@ -358,6 +358,7 @@ class LabelPerformance(object):
                 if pf is not None:
                     pf.increase_false_negative()
 
+
 class BinaryClusterClassifier(object):
     def __init__(self, label):
         self._name = label

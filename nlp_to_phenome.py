@@ -379,7 +379,7 @@ def test_eHost_doc():
     print([(e.label, e.start, e.end, e.str) for e in d.get_ess_entities()])
 
 
-def run_learning():
+def run_learning_v0():
     log_level = 'DEBUG'
     log_format = '[%(filename)s:%(lineno)d] %(name)s %(asctime)s %(message)s'
     logging.basicConfig(level='DEBUG', format=log_format)
@@ -410,6 +410,43 @@ def run_learning():
 
     mp_inst = mp.MentionPattern(settings['pattern_folder'], _cm_obj.cui2label,
                                 csv_file=settings['csv_file'], ann_folder=_test_ann_dir)
+    return do_learn_exp(settings['viz_file'],
+                        num_dimensions=[50],
+                        ignore_context=settings['ignore_context'] if 'ignore_context' in settings else False,
+                        separate_by_label=True,
+                        conll_output_file=settings['conll_output_file'], eHostGD=_eHostGD, mention_pattern=mp_inst)
+
+
+def run_learning(
+        train_ann_dir, train_gold_dir, train_text_dir,
+        test_ann_dir, test_gold_dir, test_text_dir,
+        settings):
+    log_level = 'DEBUG'
+    log_format = '[%(filename)s:%(lineno)d] %(name)s %(asctime)s %(message)s'
+    logging.basicConfig(level='DEBUG', format=log_format)
+    log_file = './settings/processing.log'
+    logging.basicConfig(level=log_level, format=log_format)
+    global _min_sample_size, _ann_dir, _gold_dir, _test_ann_dir, _test_gold_dir, _gold_text_dir, _test_text_dir, _concept_mapping, _learning_model_dir
+    global _labels, _gold_file_pattern, _ignore_mappings, _eHostGD, _cm_obj
+    global _annotated_anns
+    _annotated_anns = {}
+    _min_sample_size = settings['min_sample_size']
+    _ann_dir = train_ann_dir
+    _gold_dir = train_gold_dir
+    _test_ann_dir = test_ann_dir
+    _test_gold_dir = test_gold_dir
+    _gold_text_dir = train_text_dir
+    _test_text_dir = test_text_dir
+    _concept_mapping = settings['concept_mapping_file']
+    _learning_model_dir = settings['learning_model_dir']
+    _labels = utils.read_text_file(settings['entity_types_file'])
+    _gold_file_pattern = "%s_ann.xml" if 'gold_file_pattern' not in settings else settings['gold_file_pattern']
+    _ignore_mappings = utils.load_json_data(settings['ignore_mapping_file'])
+    _eHostGD = settings['eHostGD'] if 'eHostGD' in settings else False
+    _cm_obj = Concept2Mapping(_concept_mapping)
+
+    # not using mention patterns for prediction as this is only a in-development feature
+    mp_inst = None
     return do_learn_exp(settings['viz_file'],
                         num_dimensions=[50],
                         ignore_context=settings['ignore_context'] if 'ignore_context' in settings else False,

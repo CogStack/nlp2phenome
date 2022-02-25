@@ -32,6 +32,10 @@ class LabelModel(object):
     def concept_mapping(self):
         return self._concept_mapping
 
+    @concept_mapping.setter
+    def concept_mapping(self, concept_mapping):
+        self._concept_mapping = concept_mapping
+
     def get_binary_cluster_classifier(self, label):
         if label in self._lbl2classifiers:
             return self._lbl2classifiers[label]

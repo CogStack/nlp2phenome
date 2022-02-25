@@ -1,6 +1,5 @@
 import xml.etree.ElementTree as ET
 import datetime
-import logging
 from os import listdir
 from os.path import isfile, join
 import utils
