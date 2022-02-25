@@ -57,7 +57,7 @@ class AnnConverter(object):
         return elem_ann
 
     @staticmethod
-    def load_ann_file(f):
+    def load_ann_file(f, do_multi=True):
         tree = ET.parse(f)
         doc = tree.getroot()
         ann2label = {}
@@ -73,7 +73,8 @@ class AnnConverter(object):
             if annid not in ann2freq:
                 ann2freq[annid] = 1
             else:
-                ann2freq[annid] += 1
+                if do_multi:
+                    ann2freq[annid] += 1
             annid_freq = '%s:%s' % (annid, ann2freq[annid])
             ann2label[annid_freq] = {"text": m_text, "class": cls}
         return ann2label
@@ -124,7 +125,49 @@ class AnnConverter(object):
         print(len(missed), all_mentions)
         utils.save_string('\n'.join(mismatched), output_file)
         utils.save_string('\n'.join(missed), missing_file)
+   
+    @staticmethod
+    def calculate_IAA(ann_folder_1, ann_folder_2, output_file):
+        from sklearn.metrics import cohen_kappa_score
+        ann_files = [f for f in listdir(ann_folder_1) if isfile(join(ann_folder_1, f))]
+        ann1_annotations = {}
+        ann2_annotations = {}
+        for f in ann_files:
+            ann1 = AnnConverter.load_ann_file(join(ann_folder_1, f), do_multi=False)
+            ann2 = AnnConverter.load_ann_file(join(ann_folder_2, f), do_multi=False)
+            for ann in ann1:
+                ann1_annotations['%s_%s' % (f, ann)] = ann1[ann]['class']
+            for ann in ann2:
+                ann2_annotations['%s_%s' % (f, ann)] = ann2[ann]['class']
+        merged_anns = list(set(list(ann1_annotations.keys()) + list(ann2_annotations.keys())))
+        ann1_merged = []
+        ann2_merged = []
+        label_missed = 'missed'
+        cat2pares = {'subject': {'ann1': [], 'ann2': []}, 
+                     'irrelevant': {'ann1': [], 'ann2': []},
+                     'trajectory': {'ann1': [], 'ann2': []}, 
+        }
+        output = []
+        for ann in merged_anns:
+            ann1_label = label_missed if ann not in ann1_annotations else ann1_annotations[ann]
+            ann2_label = label_missed if ann not in ann2_annotations else ann2_annotations[ann]
+            ann1_merged.append(ann1_label)
+            ann2_merged.append(ann2_label)
+            if ann1_label == 'Irrelevant_label' or ann2_label == 'Irrelevant_label':
+                cat2pares['irrelevant']['ann1'].append(ann1_label)
+                cat2pares['irrelevant']['ann2'].append(ann2_label)
+            elif ann1_label in ['Trajectory_Subject', 'General_Trajectory'] or ann2_label in ['Trajectory_Subject', 'General_Trajectory']:
+                cat2pares['subject']['ann1'].append(ann1_label)
+                cat2pares['subject']['ann2'].append(ann2_label)
+            elif ann1_label in ['better(Trajetory)', 'worse(Trajectory)'] or ann2_label in ['better(Trajetory)', 'worse(Trajectory)']:
+                cat2pares['trajectory']['ann1'].append(ann1_label)
+                cat2pares['trajectory']['ann2'].append(ann2_label)
+            output.append('%s\t%s\t%s' % (ann, ann1_label, ann2_label))
 
+        print('kappa score: [%s]', cohen_kappa_score(ann1_merged, ann2_merged))
+        for cat in cat2pares:
+            print('%s kappa score: [%s]' % (cat, cohen_kappa_score(cat2pares[cat]['ann1'], cat2pares[cat]['ann2'])))
+        utils.save_string('\n'.join(output), output_file)
 
 if __name__ == "__main__":
     # AnnConverter.load_ann_file('S:/NLP/annotation_Steven/stroke_nlp/saved/Stroke_id_105.txt.knowtator.xml')
