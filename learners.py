@@ -11,7 +11,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import logging
 from os.path import basename, isfile, join, split
 from os import listdir, remove
-import graphviz
+# import graphviz
 import numpy
 
 
@@ -179,23 +179,28 @@ class PhenomeLearners(object):
                                         label_whitelist=label_whitelist)
 
     @staticmethod
-    def merge_with_pattern_prediction(y_pred, mp_predict):
+    def merge_with_pattern_prediction(y_pred, mp_predict, pred_prob=False, threshold=0.5):
         if mp_predict is None:
             return y_pred
         y_merged = []
         print('>>>', y_pred, mp_predict)
         for idx in range(len(y_pred)):
             y_merged.append(y_pred[idx])
-            if y_pred[idx] == 1 and mp_predict[idx] == 0:
+            pred_true = (y_pred[idx] == 1)
+            if pred_prob:
+                pred_true = (y_pred[idx] >= threshold)
+            if pred_true and mp_predict[idx] == 0:
                 y_merged[idx] = 0
         return y_merged
 
     @staticmethod
     def predict_use_simple_stats_in_action(tp_ratio, item_size, ratio_cut_off=0.15,
-                                           doc2predicted=None, doc_anns=None, mp_predicted=None):
+                                           doc2predicted=None, doc_anns=None, mp_predicted=None,
+                                           keep_predict_prob=False):
         P = numpy.ones(item_size) if tp_ratio >= ratio_cut_off else numpy.zeros(item_size)
         P = PhenomeLearners.merge_with_pattern_prediction(P, mp_predicted)
-        PhenomeLearners.collect_prediction(P, doc2predicted=doc2predicted, doc_anns=doc_anns)
+        PhenomeLearners.collect_prediction(P, doc2predicted=doc2predicted, doc_anns=doc_anns,
+                                           keep_predict_prob=keep_predict_prob)
 
     @staticmethod
     def cal_performance(P, Y, performance, separate_performance=None,
@@ -254,7 +259,8 @@ class PhenomeLearners(object):
 
     @staticmethod
     def predict_use_model_in_action(X, model_file, pca_model_file=None,
-                                    doc2predicted=None, doc_anns=None, mp_predicted=None):
+                                    doc2predicted=None, doc_anns=None, mp_predicted=None,
+                                    keep_predict_prob=False, threshold=0.5):
         all_true = False
         if not isfile(model_file):
             logging.info('model file NOT FOUND: %s' % model_file)
@@ -266,27 +272,41 @@ class PhenomeLearners(object):
             else:
                 X_new = X
             m = jl.load(model_file)
-            P = m.predict(X_new)
+            if keep_predict_prob:
+                P = m.predict_proba(X_new)
+            else:
+                P = m.predict(X_new)
 
         if all_true:  # or len(X) <= _min_sample_size:
             logging.warning('using querying instead of predicting')
             P = numpy.ones(len(X))
         else:
             logging.info('instance size %s' % len(P))
-        P = PhenomeLearners.merge_with_pattern_prediction(P, mp_predicted)
+        P = PhenomeLearners.merge_with_pattern_prediction(P, mp_predicted,
+                                                          pred_prob=keep_predict_prob, threshold=threshold)
         PhenomeLearners.collect_prediction(P, doc2predicted=doc2predicted, doc_anns=doc_anns)
 
     @staticmethod
-    def collect_prediction(P, doc_anns, doc2predicted):
+    def collect_prediction(P, doc_anns, doc2predicted, keep_predict_prob=False):
         for idx in range(len(P)):
-            if P[idx] == 1.0 and doc_anns is not None:
-                d = doc_anns[idx]['d']
-                labeled_ann = {'label': doc_anns[idx]['label'],
-                               'ann': doc_anns[idx]['ann']}
-                if d not in doc2predicted:
-                    doc2predicted[d] = [labeled_ann]
-                else:
-                    doc2predicted[d].append(labeled_ann)
+            if keep_predict_prob:
+                if doc_anns is not None:
+                    PhenomeLearners.collect_doc_results(idx, doc_anns, doc2predicted, prob=P[idx])
+            else:
+                if P[idx] == 1.0 and doc_anns is not None:
+                    PhenomeLearners.collect_doc_results(idx, doc_anns, doc2predicted)
+
+    @staticmethod
+    def collect_doc_results(idx, doc_anns, doc2predicted, prob=None):
+        d = doc_anns[idx]['d']
+        labeled_ann = {'label': doc_anns[idx]['label'],
+                       'ann': doc_anns[idx]['ann']}
+        if prob is not None:
+            labeled_ann['prob'] = prob
+        if d not in doc2predicted:
+            doc2predicted[d] = [labeled_ann]
+        else:
+            doc2predicted[d].append(labeled_ann)
 
 
 class LabelPerformance(object):

@@ -64,7 +64,7 @@ def label_model_predict(lm, model_file_pattern, lbl2data, doc2predicted,
                                                                item_size=len(X),
                                                                doc2predicted=doc2predicted,
                                                                doc_anns=doc_anns,
-                                                               mp_predicted=mp_predicted)
+                                                               mp_predicted=mp_predicted, keep_predict_prob=True)
         else:
             if len(X) > 0:
                 logging.debug('%s, dimensions %s' % (lbl, len(X[0])))
@@ -72,7 +72,7 @@ def label_model_predict(lm, model_file_pattern, lbl2data, doc2predicted,
                                                         pca_model_file=None,
                                                         doc2predicted=doc2predicted,
                                                         doc_anns=doc_anns,
-                                                        mp_predicted=mp_predicted)
+                                                        mp_predicted=mp_predicted, keep_predict_prob=True)
 
 
 def hybrid_prediciton(settings):
@@ -171,7 +171,8 @@ def predict_to_eHOST_results(predict_setting):
     if 'output_file' in ss.settings:
         d2ann = {}
         for d in predicted_results:
-            d2ann[d] = [{'label': t['label'], 'ann': t['ann'].to_dict()} for t in predicted_results[d]]
+            d2ann[d] = [{'label': t['label'], 'ann': t['ann'].to_dict(), 'prob': t['prob'] if 'prob' in t else ''}
+                        for t in predicted_results[d]]
         utils.save_json_array(d2ann, ss.settings['output_file'])
 
 
