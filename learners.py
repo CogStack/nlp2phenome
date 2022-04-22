@@ -274,6 +274,10 @@ class PhenomeLearners(object):
             m = jl.load(model_file)
             if keep_predict_prob:
                 P = m.predict_proba(X_new)
+                if P.shape[1] == 2:
+                    P = P[:, 1]
+                else:
+                    P = P[:, 0]
             else:
                 P = m.predict(X_new)
 
@@ -284,7 +288,8 @@ class PhenomeLearners(object):
             logging.info('instance size %s' % len(P))
         P = PhenomeLearners.merge_with_pattern_prediction(P, mp_predicted,
                                                           pred_prob=keep_predict_prob, threshold=threshold)
-        PhenomeLearners.collect_prediction(P, doc2predicted=doc2predicted, doc_anns=doc_anns)
+        PhenomeLearners.collect_prediction(P, doc2predicted=doc2predicted, doc_anns=doc_anns,
+                                           keep_predict_prob=keep_predict_prob)
 
     @staticmethod
     def collect_prediction(P, doc_anns, doc2predicted, keep_predict_prob=False):

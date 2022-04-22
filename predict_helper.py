@@ -92,13 +92,14 @@ def hybrid_prediciton(settings):
     for d in d2p:
         for t in d2p[d]:
             ann = t['ann']
+            prob = t['prob']
             if hasattr(ann, 'cui'):
                 lbl = _cm_obj.concept2label[ann.cui][0]
                 pheAnn = PhenotypeAnn(ann.str, ann.start, ann.end, ann.negation, ann.temporality, ann.experiencer,
                                           'StudyName', lbl)
-                put_ann_label(lbl, pheAnn, doc2predicted, d)
+                put_ann_label(lbl, pheAnn, doc2predicted, d, prob=prob)
             else:
-                put_ann_label(ann.minor_type, ann, doc2predicted, d)
+                put_ann_label(ann.minor_type, ann, doc2predicted, d, prob=prob)
     for fk in file_keys:
         cr = CustomisedRecoginiser(join(ann_dir, 'se_ann_%s.json' % fk), _concept_mapping)
         d = fk
@@ -141,9 +142,11 @@ def direct_nlp_prediction(settings):
     return doc2predicted
 
 
-def put_ann_label(lbl, pheAnn, doc2predicted, d):
+def put_ann_label(lbl, pheAnn, doc2predicted, d, prob=None):
     labeled_ann = {'label': lbl,
                    'ann': pheAnn}
+    if prob is not None:
+        labeled_ann['prob'] = prob
     if d not in doc2predicted:
         doc2predicted[d] = [labeled_ann]
     else:
