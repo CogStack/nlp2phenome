@@ -1,3 +1,7 @@
+# Archived
+
+This repo is no longer maintained. For questions on this reop please email Honghan directly (honghan.wu@gmail.com), or for broader CogStack enquiries please reach out to contact@cogstack.org
+
 # nlp2phenome
 using AI models to infer patient phenotypes from identified named entities (instances of biomedical concepts)
 
